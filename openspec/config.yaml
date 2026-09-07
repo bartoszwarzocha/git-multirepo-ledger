@@ -14,19 +14,17 @@ context: |
   but is organised around one repository at a time. Nothing takes the *directory* as the
   unit. With twenty repositories, "which of these moved" costs twenty context switches.
 
-  ## Measured baseline (E:\AI, 2026-09-07)
+  ## The governing constraint: it is published
 
-  - 23 git repositories under one directory; 7 nested two or three levels down; one
-    repository inside another
-  - 13 of the 23 fail every git command with `fatal: detected dubious ownership`, exit 128,
-    because they were carried over from another Windows installation and are owned by its SID.
-    A mundane cause with a small consequence: exit 128 is a row state carrying a sentence, not
-    a blank row
-  - Process spawn dominates: `git --version` costs 77 ms median from Node, and
-    `git status --porcelain=v2 --branch` costs 71 ms — the same. Git's work is free at
-    this scale; starting the process is not
-  - One row costs three commands, ~276 ms serially; all 23 repositories at concurrency 8
-    take ~0.7 s warm (1.2 s cold), and the knee of the curve is at four
+  It will run on layouts, hardware and networks its author will never see. Nothing may be
+  assumed about how many repositories there are, how they are nested, how fast git answers,
+  how many cores the machine has, whether a given repository answers at all, whether `git`,
+  `gh` or `glab` are installed or authenticated, or whether every repository belongs to the
+  same account and forge.
+
+  Measurements taken on a development machine are smoke tests, never design inputs. A number
+  from one machine does not become a constant, a threshold or an argument. If a measurement
+  appears to justify a decision, the decision has been fitted to a single sample and is wrong.
 
   ## Tech Stack
 
@@ -44,13 +42,15 @@ context: |
 
   - **The directory is the unit.** Repositories are discovered at any depth beneath the
     open folders and beneath configured absolute paths, whether or not they are open.
-  - **Spawn count is the budget.** Every design question reduces to how few git processes
-    a row costs. `git status --porcelain=v2 --branch` earns its place by answering branch,
-    upstream, divergence and dirtiness in one process.
-  - **An unreadable repository is a state, not an absence.** A directory that has collected
-    repositories from more than one source will hold some the current user did not create,
-    and git refuses those. The row says so and names the command that fixes it. Ordinary
-    error handling, sized as such - not a headline.
+  - **Spawn count is the budget.** Process startup, not git's work, is what a row costs on
+    every platform. So the question is always how few processes a row needs -
+    `git status --porcelain=v2 --branch` earns its place by answering branch, upstream,
+    divergence and dirtiness in one.
+  - **Nothing blocks and nothing waits for everything.** Rows appear as each repository
+    resolves. A superseded read is cancelled. A read that times out says so.
+  - **An unreadable repository is a state, not an absence.** The row carries the reason and,
+    where there is one, the command that fixes it. A count nobody established never renders
+    as zero.
   - **Everything is a read.** No staging, committing, pushing or merging. The extension
     hands off to the tools already installed.
   - **The network is opt-in.** Merge-request counts touch the network, so they ship
@@ -67,19 +67,21 @@ context: |
 rules:
   proposal:
     - State what this does that VS Code's Source Control view and GitLens do not, in the first paragraph
-    - Every claim about the machine, the repositories or the cost must come from a measurement that is quoted
     - Do not quote a Marketplace install count or a competitor's feature unless it has been checked
+    - Do not justify any decision with a number measured on the development machine
     - Name the capabilities that will become spec files, one bullet each
-    - Include an Impact section covering spawn count, wall clock, and what touches the network
+    - Include an Impact section covering spawn count, cancellation, and what touches the network
   specs:
     - Use WHEN/THEN scenarios for every requirement
     - Every requirement must be observable from outside - a row's text, a command's result, a file on disk
-    - Cover the degenerate repositories explicitly - unreadable ownership, no commits, detached HEAD, mid-rebase, no remote, bare
+    - Cover the degenerate repositories explicitly - unreadable, no commits, detached HEAD, mid-rebase, no remote, bare, nested inside another
+    - Cover the degenerate environments - no git on PATH, no gh or glab, an unauthenticated host, a slow or unreachable filesystem
     - A count the extension has not established must never render as zero
     - State what the row shows while an answer is still being fetched
   design:
     - Record each decision as D1, D2, ... with the alternative rejected and what goes wrong with it
-    - State the spawn count and the measured wall clock for every operation that touches git
+    - State the spawn count for every operation that touches git, and where its concurrency comes from
+    - No tuning constant may be a number from one machine; derive it or make it a setting
     - Justify webview versus TreeView for each surface rather than assuming either
     - Name which files are copied from the sibling project verbatim and which are adapted
     - Say what happens to an in-flight read when the user clicks a different repository
