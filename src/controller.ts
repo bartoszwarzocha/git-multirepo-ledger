@@ -377,8 +377,13 @@ export class LedgerController implements vscode.Disposable {
    */
   private select(target: string): void {
     const row = this.rows.find((entry) => pathKey(entry.repository.path) === pathKey(target));
+    // Logged because this is the one interaction with no visible effect when it
+    // goes wrong: a click that never arrives and a click that arrives and finds
+    // no row look identical on screen, and the log is what tells them apart.
+    log.info(row ? `selected ${row.repository.label}` : `selected a path no row holds: ${target}`);
     this.selectedPath = row ? row.repository.path : undefined;
     this.publish(this.passRunning);
+    this.history.reveal();
     void this.loadHistory(row, 0);
   }
 

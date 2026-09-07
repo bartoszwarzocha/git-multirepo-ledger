@@ -61,6 +61,23 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     this.render();
   }
 
+  /**
+   * Expand the pane, without taking the focus.
+   *
+   * The list above is driven by selection and this pane is the whole of what a
+   * selection does, so a reader whose History section is collapsed - which is a
+   * state the editor remembers between windows - clicks a row and sees nothing.
+   * `show(true)` preserves focus, so the click does not move the caret out of
+   * the list the reader is still scanning.
+   *
+   * Silent when the view has never been resolved: the editor resolves it on
+   * first reveal and it will render the current model then, so there is nothing
+   * to recover from here.
+   */
+  reveal(): void {
+    this.view?.show?.(true);
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;

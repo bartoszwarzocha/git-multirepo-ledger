@@ -4,3 +4,8 @@ out/
 *.vsix
 .vscode-test/
 *.tsbuildinfo
+
+# A stand-in for the extension host API, written by the headless probes.
+# Not a dependency: `vscode` is external in the bundle and node_modules is not
+# in the .vsix.
+node_modules/vscode/
