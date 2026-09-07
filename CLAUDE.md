@@ -109,18 +109,54 @@ Two commits, nothing pushed, no remote configured.
 3. Then discovery and the row read, because every surface renders their output. Each group of
    tasks ends in something runnable or testable.
 
-## Open questions for the user — ask, do not investigate
+## Answered by the user on 2026-09-07 — closed, do not reopen
 
-- The row is three lines in a **narrow sidebar**. Which field gets dropped first when it does not
-  fit? The sibling solves this by moving the least useful field to a dimmed trailing span.
-- Does the history pane need the commit graph (the `--graph` lanes), or is a dated list enough for
-  a first version?
-- Should clicking a commit in the history open its diff? If so, this needs research into the
-  built-in `vscode.git` extension's exported API versus its internal commands, and a fallback.
-- Does the top list need sorting, and by what — name, most recently committed, most divergent,
-  dirtiest?
-- Is a repository nested inside another repository shown as one row or two?
-- UI language is **English**, matching the sibling. Confirm before writing user-facing strings.
+These were the open questions. They were put to the user as live mockups and as a decision
+document built from research; the answers below are settled.
+
+- **Which field yields first in a narrow sidebar?** The one whose absence degrades to "I don't
+  know" rather than to a wrong impression — the dimmed evidence-age caption. Repository name and
+  the last-commit subject hold their width.
+- **Commit graph lanes?** **No, deferred to a later change.** VS Code 1.136 ships a Source
+  Control Graph on by default, so lanes are the least differentiated work in the project and are
+  a week on their own. The parent list (`%P`) is read into the model from day one, so the later
+  change needs no migration.
+- **Does clicking a commit open its diff?** In v1 it expands the **list of files that commit
+  changed** — one process, no new machinery. The native per-file diff is **deferred**: the `git:`
+  URI scheme resolves only for repositories the built-in git extension has opened, which excludes
+  exactly the repositories this extension exists to show, so a real diff needs this extension to
+  own a `FileSystemProvider` over `git cat-file`.
+- **Sorting?** Default is **most recently committed first** — research established that nobody
+  else offers it, so it is half the differentiator rather than a preference. Name, divergence and
+  dirtiness are the other modes.
+- **A repository nested inside another — one row or two?** Decided in `design.md`. Finding a
+  `.git` means not descending into it, and `.git` as a *file* (worktree, submodule) is classified
+  from the filesystem before anything is spawned.
+- **UI language:** **English**, confirmed.
+
+Two further things the user settled, which were never on this list:
+
+- **Branch count is dropped from the row.** No precedent in any tool surveyed. Line 3 carries
+  HEAD state and the repository-kind marker instead.
+- **Dirty state is on the row**, as an opt-in second-tier read. It is the only column every
+  dedicated multi-repository status tool agrees on.
+
+## What the research established — read before arguing with the premise
+
+A 46-agent sweep on 2026-09-07 checked the competitive premise against primary sources and
+**refuted part of it**. The corrected version is in `openspec/project.md`; the short form:
+
+- Core's Source Control row and GitLens's repository node **already** carry branch and
+  ahead/behind. "Source Control answers only which files are dirty" is false.
+- GitLens **can** see repositories outside the workspace, through SCM open/close events.
+- Directory-as-the-unit discovery is **not** unoccupied — Project Manager does exactly that walk
+  for millions of users. It shows no git state, which is the actual gap.
+- What survives: the last commit on the row, sorting by it, repositories deeper than one level or
+  never opened, and review counts without a paid plan.
+- The gap is real; the demand is unproven. Twenty-seven extensions in this niche, none above
+  ~760 installs.
+
+Do not restore the old claims. They are checkable and they are wrong.
 
 ## Working agreement
 

@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "${defaultBuildTask}"
+    },
+    {
+      // The directory is asked for rather than written down. A literal path
+      // here would be one machine's, and this configuration exists precisely to
+      // open the view on something real - which for anyone but its author would
+      // mean launching against a directory that does not exist, and on macOS or
+      // Linux against a string that is not even a path.
+      "name": "Run Extension against a directory of repositories",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}", "${input:repositoriesDirectory}"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "${defaultBuildTask}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "repositoriesDirectory",
+      "type": "promptString",
+      "description": "Absolute path to a directory containing git repositories to open the Extension Development Host on"
+    }
+  ]
+}

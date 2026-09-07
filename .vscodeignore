@@ -1,0 +1,36 @@
+# Sources - the extension ships as a single bundled dist/extension.js
+src/**
+.vscode/**
+.vscode-test/**
+node_modules/**
+out/**
+*.vsix
+
+# Build and lint configuration
+tsconfig.json
+esbuild.js
+eslint.config.js
+package-lock.json
+
+# Repository automation and hygiene, not part of the extension
+.github/**
+.gitattributes
+.editorconfig
+
+# Project documents that are not user documentation
+openspec/**
+.claude/**
+CLAUDE.md
+.gitignore
+.git
+
+# Tests
+**/*.test.ts
+
+# Misc
+npm-debug.log*
+*.log
+.DS_Store
+
+# Measurement and preview harness (not shipped)
+scripts/**

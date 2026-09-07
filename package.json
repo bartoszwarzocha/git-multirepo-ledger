@@ -1,0 +1,195 @@
+{
+  "name": "repo-ledger",
+  "displayName": "Repo Ledger",
+  "description": "A status board for a whole directory of git repositories: what moved last, on which branch, how far from upstream, and what is waiting in review.",
+  "version": "0.0.1",
+  "publisher": "bartosz-warzocha",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bartoszwarzocha/repo-ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bartoszwarzocha/repo-ledger/issues"
+  },
+  "homepage": "https://github.com/bartoszwarzocha/repo-ledger#readme",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "git",
+    "repositories",
+    "multi-repo",
+    "monorepo",
+    "status",
+    "branches",
+    "merge-request",
+    "pull-request",
+    "overview",
+    "dashboard"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Repo Ledger reads repositories by running the git command line, which a virtual filesystem cannot provide."
+    },
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Repo Ledger runs git in the directories it discovers, so it asks for trust before reading anything."
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "repo-ledger",
+          "title": "Repo Ledger",
+          "icon": "resources/activity-bar.svg"
+        }
+      ]
+    },
+    "views": {
+      "repo-ledger": [
+        {
+          "id": "repoLedger.repositories",
+          "name": "Repositories",
+          "type": "webview",
+          "contextualTitle": "Repo Ledger",
+          "visibility": "visible",
+          "initialSize": 1
+        },
+        {
+          "id": "repoLedger.history",
+          "name": "History",
+          "contextualTitle": "Repo Ledger",
+          "initialSize": 1,
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "repoLedger.refresh",
+        "title": "Refresh",
+        "category": "Repo Ledger",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "repoLedger.showOutput",
+        "title": "Show Log",
+        "category": "Repo Ledger"
+      },
+      {
+        "command": "repoLedger.openAdditionalRootsSetting",
+        "title": "Configure Additional Roots",
+        "category": "Repo Ledger"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "repoLedger.refresh",
+          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "group": "navigation@0"
+        },
+        {
+          "command": "repoLedger.showOutput",
+          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "group": "1_ledger@0"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Repo Ledger",
+      "properties": {
+        "repoLedger.additionalRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine-overridable",
+          "markdownDescription": "Absolute directory paths scanned for git repositories in addition to the open workspace folders. Use this for the directory your repositories actually live in when you have not opened it in the editor - that is the normal case for this extension, since the point of it is to answer across repositories you are *not* currently working in. A path that does not exist is reported once in the log and skipped."
+        },
+        "repoLedger.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine-overridable",
+          "markdownDescription": "Absolute paths of repositories to leave out of the Ledger entirely. An excluded repository is not read, not counted and not shown, so a mirror, a vendored checkout or something you keep on disk but never work in stops taking up a row beside the repositories you do watch."
+        },
+        "repoLedger.maxDepth": {
+          "type": "number",
+          "default": 32,
+          "minimum": 1,
+          "markdownDescription": "How many directory levels below each scanned root the search descends looking for a `.git`. This is a stop against a symlink cycle or a root that turns out to be a home directory, **not** a way to make the scan cheaper: lowering it hides repositories that sit deeper than the limit, and a repository missing from the list is worse than a scan that takes a moment longer, because nothing on screen says it is missing."
+        },
+        "repoLedger.dirty.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show which repositories have uncommitted changes. This is the one read that has to walk the working tree, so it costs a second `git` process for each repository on screen, and on a very large checkout or a network share it is the read you would feel. What it buys is the only column every dedicated multi-repository status tool agrees on: the `*`, `+` and `!` markers that say a repository holds work not yet committed - the work that exists nowhere but this disk. While this is off the Ledger says nothing in that position rather than showing a zero, because a repository nobody asked about is not a repository that is clean."
+        },
+        "repoLedger.concurrency": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 64,
+          "markdownDescription": "How many repositories are read at the same time. Leave this at `0` and the Ledger works it out from what this machine says it can run at once, which is the right answer on almost every machine: reading a repository costs starting a `git` process and waiting, so the number that suits a four-core laptop is not the one that suits a thirty-two-core workstation. Set it yourself when you know something the Ledger cannot - a slow network share that dislikes many readers at once, or a machine where you would rather the scan took longer and stayed out of the way. Lower is gentler and slower; higher finishes sooner and holds more processes open at once."
+        },
+        "repoLedger.forge.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show open merge and pull request counts on each row. This runs the `gh` and `glab` command line tools, which reach the network and use whatever credentials those tools already hold on this machine; the extension never asks for a token and never stores one. While this is off neither tool is invoked and nothing leaves the machine. It ships off because everything else the Ledger does is a local read, and a network call is not something an extension should start making on its own."
+        },
+        "repoLedger.history.pageSize": {
+          "type": "number",
+          "default": 50,
+          "minimum": 5,
+          "maximum": 500,
+          "markdownDescription": "How many commits the history pane reads at a time. Each page is one `git log`, so a larger page means fewer reads while you scroll and a longer wait for the first one. The pane never asks for a whole history: a repository with ten years of it would hand the panel a document it has to lay out in a single frame."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run clean && npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "vsix": "npm run package && npx --yes @vscode/vsce package",
+    "test:watch": "node --test --watch \"src/**/*.test.ts\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "@types/vscode": "^1.104.0",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "esbuild": "^0.25.10",
+    "eslint": "^9.36.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3"
+  },
+  "galleryBanner": {
+    "color": "#181C26",
+    "theme": "dark"
+  },
+  "qna": "marketplace"
+}

@@ -4,4 +4,3 @@ out/
 *.vsix
 .vscode-test/
 *.tsbuildinfo
-.github/

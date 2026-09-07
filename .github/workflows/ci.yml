@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    # Windows is not optional here: this extension is almost entirely git
+    # subprocess handling and path comparison, and Windows is where both
+    # behave differently from the Linux runner.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24 for the test runner: the tests are TypeScript and are run unbuilt.
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check-types
+      - run: npm run lint
+      - run: npm test
+      - run: npx --yes @vscode/vsce package
