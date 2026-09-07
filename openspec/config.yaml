@@ -9,10 +9,20 @@ context: |
 
   ## Why this exists
 
-  VS Code's Source Control view knows only the repositories inside the open folders, and
-  answers one question about them: which files are dirty. GitLens is excellent and deep
-  but is organised around one repository at a time. Nothing takes the *directory* as the
-  unit. With twenty repositories, "which of these moved" costs twenty context switches.
+  Checked against primary sources on 2026-09-07, because the first version of this
+  paragraph was wrong in four places and a premise a reviewer can disprove is worse than
+  none. What is true: VS Code's own Repositories row already carries the branch and the
+  ahead/behind figures, and so does GitLens's - neither carries the last commit, anywhere,
+  and neither will sort by it. `git.repositoryScanMaxDepth` defaults to 1 and
+  `git.scanRepositories` refuses an absolute path outright, so a repository two levels down,
+  or in a directory nobody opened, is invisible to both. Directory-as-the-unit discovery is
+  *not* unoccupied - two seven-figure extensions do exactly that walk - but they show no git
+  state, and that is the gap.
+
+  So the differentiator is narrow and checkable: the last commit on the row, the ordering by
+  it, and repositories deeper than one level or never opened. The gap is real and the demand
+  is unproven; nothing comparable on the Marketplace is above a few hundred installs. Do not
+  restore the wider claim.
 
   ## The governing constraint: it is published
 

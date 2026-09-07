@@ -40,10 +40,13 @@ import * as path from 'node:path';
 
 import { shortSha } from '../model/keys.ts';
 import type { FetchEvidence, Operation, OperationKind } from '../model/types.ts';
-import { statSafe } from '../util/fsx.ts';
+import { readTextSafe, statSafe } from '../util/fsx.ts';
+import { parseRemotes, primaryRemote } from '../forge/remote.ts';
 
 /** What one repository's git directory says about itself, with no git run. */
 export interface GitState {
+  /** The primary remote's URL, when `.git/config` names one. */
+  readonly remoteUrl?: string;
   /** Absent when nothing was left running, which is the ordinary case. */
   readonly operation?: Operation;
   readonly fetch: FetchEvidence;
@@ -90,8 +93,16 @@ const DETAIL_MAX_BYTES = 4096;
  * repository's copies say nothing about it.
  */
 export async function readGitState(gitDir: string): Promise<GitState> {
-  const [operation, fetch] = await Promise.all([readOperation(gitDir), readFetchEvidence(gitDir)]);
-  return operation ? { operation, fetch } : { fetch };
+  const [operation, fetch, remoteUrl] = await Promise.all([
+    readOperation(gitDir),
+    readFetchEvidence(gitDir),
+    readRemoteUrl(gitDir),
+  ]);
+  return {
+    fetch,
+    ...(operation ? { operation } : {}),
+    ...(remoteUrl === undefined ? {} : { remoteUrl }),
+  };
 }
 
 /**
@@ -380,4 +391,29 @@ function plural(count: number, unit: string): string {
  */
 export function unixNow(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Where the repository publishes
+// ---------------------------------------------------------------------------
+
+/**
+ * The primary remote's URL, read from `.git/config`.
+ *
+ * Zero processes, for the same reason everything else in this file is: asking
+ * git costs a spawn per repository, and spawn count is the budget of the whole
+ * board. The file is small and its `[remote "..."] url` lines are the only part
+ * that is read.
+ *
+ * Absent when there is no remote, which is a state rather than a failure - a
+ * repository nobody publishes has no review question to answer - and absent
+ * again when the file cannot be read, because a remote guessed at would send a
+ * forge query to the wrong owner.
+ */
+export async function readRemoteUrl(gitDir: string): Promise<string | undefined> {
+  const text = await readTextSafe(path.join(gitDir, 'config'));
+  if (text === undefined) {
+    return undefined;
+  }
+  return primaryRemote(parseRemotes(text))?.url;
 }

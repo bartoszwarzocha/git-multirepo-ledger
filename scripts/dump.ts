@@ -93,3 +93,36 @@ console.log(
   `timing  walk ${discoveredAt - startedAt} ms · rows ${readAt - discoveredAt} ms · ` +
     `dirty ${dirtyAt - readAt} ms · concurrency ${pass.concurrency}`,
 );
+
+// ---------------------------------------------------------------------------
+// Review counts, which are what `repoLedger.forge.enabled` switches on
+// ---------------------------------------------------------------------------
+
+if (process.argv.includes('--forge')) {
+  const { readReviewCounts, targetKey } = await import('../src/forge/counts.ts');
+  const { forgeKindOf, parseForgeTarget } = await import('../src/forge/remote.ts');
+
+  const targets = new Map<string, ReturnType<typeof parseForgeTarget> & object>();
+  for (const row of rows) {
+    const url = row.remoteUrl;
+    if (url === undefined) {
+      continue;
+    }
+    const target = parseForgeTarget(url);
+    if (target && forgeKindOf(target.host) !== undefined) {
+      targets.set(targetKey(target), target);
+    }
+  }
+
+  console.log(`\nforge   ${targets.size} repositories point at a host with a client`);
+  const at = Date.now();
+  const states = await readReviewCounts({ targets });
+  console.log(`        answered in ${Date.now() - at} ms\n`);
+  for (const [key, state] of states) {
+    console.log(
+      state.kind === 'counted'
+        ? `  ${String(state.open).padStart(3)} open   ${key}`
+        : `    silent   ${key}  (${state.reason})`,
+    );
+  }
+}

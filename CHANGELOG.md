@@ -33,6 +33,12 @@ All notable changes to Repo Ledger are recorded here, in the format of
   repository this board exists to show.
 - **Row hand-offs**: open the repository's folder in a new window, or copy its path. Both are
   explicit buttons on the row. The primary click only selects.
+- **Open review counts**, from `gh` and `glab`, switched off by default because they are the one
+  thing here that leaves the machine. Batched by owner rather than fetched per repository: GitHub
+  allows thirty search requests a minute, so the per-repository version does not work at all on a
+  directory of any size. A count whose query stopped at its own limit renders as `41+`; a host with
+  no client, a tool that is not installed and a tool that is not signed in each render as silence
+  with their own sentence, never as a zero.
 - Settings: `repoLedger.additionalRoots`, `repoLedger.exclude`, `repoLedger.maxDepth`,
   `repoLedger.dirty.enabled`, `repoLedger.concurrency`, `repoLedger.history.pageSize` and
   `repoLedger.forge.enabled`.
@@ -44,7 +50,8 @@ All notable changes to Repo Ledger are recorded here, in the format of
 
 - **Everything the extension runs is a read.** `--no-optional-locks` precedes every `status`, so not
   even `.git/index` is rewritten. Nothing in this version touches the network, and the only thing
-  ever written is the extension's own storage.
+  ever written is the extension's own storage — unless the review counts are switched on, which is
+  the single outbound path and is named as such wherever it appears.
 - **A figure the extension has not established never renders as zero.** A working tree nobody read
   is not a clean one; a branch with no upstream is not level with one; a branch whose upstream is
   gone says so in words; and the divergence figure carries the age of its own evidence rather than
@@ -57,9 +64,15 @@ All notable changes to Repo Ledger are recorded here, in the format of
 
 ### Not in this version
 
-- Merge lanes in the history pane. VS Code 1.136 ships a Source Control Graph on by default, so
-  lanes are the least differentiated work in the project. The parent list is read and stored from
-  the first version, so drawing them later needs a renderer rather than a migration.
-- Open merge and pull request counts from the `gh` and `glab` CLIs. It reaches the network, so it
-  ships disabled and is a later change; the setting is declared and does nothing yet.
+- Merge lanes in the history pane. VS Code ships a Source Control Graph on by default, so lanes are
+  the least differentiated work in the project. The parent list is read and stored from the first
+  version, so drawing them later needs a renderer rather than a migration.
+- A text filter over the board. The tally chips answer the questions the header raises, and the
+  editor's own find covers the rest.
+- Three of the five row hand-offs. Open Folder in a New Window and Copy Path ship as inline
+  buttons; Reveal in Source Control, Open in Terminal and Open Remote in Browser are wired in the
+  controller and have no button yet.
+- Verification by a person. Nobody has run the empty and unusual states by hand in the Extension
+  Development Host, and the `glab` path has never met a real `glab`. Both are recorded as open in
+  `openspec/changes/implement-repo-ledger/tasks.md` rather than quietly ticked.
 - A Marketplace release. Nothing is published.

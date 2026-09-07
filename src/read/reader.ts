@@ -762,6 +762,7 @@ function readRowOf(
     // counted rather than a row counted as clean.
     workingTree: { kind: 'not-read' },
     fetch: state.fetch,
+    ...(state.remoteUrl === undefined ? {} : { remoteUrl: state.remoteUrl }),
     ...(read.incomplete ? { incomplete: read.incomplete } : {}),
   };
 }
@@ -782,6 +783,7 @@ function unreadableRow(
     ...(state.operation ? { operation: state.operation } : {}),
     workingTree: { kind: 'not-read' },
     fetch: state.fetch,
+    ...(state.remoteUrl === undefined ? {} : { remoteUrl: state.remoteUrl }),
     failure,
   };
 }

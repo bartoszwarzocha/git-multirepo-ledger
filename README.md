@@ -93,9 +93,18 @@ the filesystem; the readers for `for-each-ref` and `status --porcelain=v2`; the 
 fetch-evidence readers; and the logic that decides what every row says and in what order. All of it
 is unit-tested against repositories the tests build and drive into each state.
 
-What does not exist yet: the `gh`/`glab` layer that would put review counts on the row, and the
-merge lanes in the history pane. Both are later changes and both are recorded as deferred, with
-their reasons, in `openspec/changes/implement-repo-ledger/design.md`.
+Open review counts are built and switched off, which is where they will stay by default. They run
+`gh` and `glab`, batched by owner rather than per repository — GitHub allows thirty search requests
+a minute, and a directory of forty repositories asked one at a time renders a half-populated board
+that reads as a bug. A query that stops at its own limit renders as `41+` rather than as a total,
+and a host with no client shows nothing rather than a zero. The `glab` half has never met a real
+`glab`; until it does it fails to silence, which is the ship-safe state and not a substitute for
+the check.
+
+What does not exist: merge lanes in the history pane, a text filter over the board, and three of
+the five row hand-offs. All are recorded as deferred, with their reasons, in
+`openspec/changes/implement-repo-ledger/`. Nobody has yet run the empty and unusual states by hand
+in the Extension Development Host, which is the largest thing standing between this and a release.
 
 No screenshots, benchmarks or install counts appear above because none of them exist yet, and none
 will be added before they are true. The one number worth stating plainly: nothing comparable on the

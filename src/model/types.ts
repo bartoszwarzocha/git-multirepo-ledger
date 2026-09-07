@@ -356,7 +356,41 @@ export interface RepositoryRow {
    * and a failed one does not.
    */
   readonly incomplete?: string;
+  /**
+   * Open merge or pull requests, when the forge layer was on and could answer.
+   *
+   * Absent means nobody asked - the layer is off, or this host has no client
+   * this version speaks. That is deliberately a different value from
+   * `{ kind: 'counted', open: 0 }`, which means the question was put and the
+   * answer was none. Collapsing the two would put a confident zero beside every
+   * repository on a machine where `gh` is not installed.
+   */
+  readonly review?: ReviewState;
+  /**
+   * The primary remote's URL, read from `.git/config` rather than asked of git.
+   *
+   * Absent when the repository has no remote, which is a state and not a
+   * failure: a repository nobody publishes has no review question to answer.
+   */
+  readonly remoteUrl?: string;
 }
+
+/** What is known about a repository's open reviews. See `RepositoryRow.review`. */
+export type ReviewState =
+  | {
+      readonly kind: 'counted';
+      readonly open: number;
+      /**
+       * The owner query returned as many results as it was allowed to fetch, so
+       * this is a floor rather than a total.
+       *
+       * Without this a truncated answer renders as an exact one, which is the
+       * same failure as a zero nobody established: the reader has no way to tell
+       * that the number stopped short. The row draws it as `41+`.
+       */
+      readonly atLeast?: boolean;
+    }
+  | { readonly kind: 'unavailable'; readonly reason: string };
 
 /**
  * One repository as the page draws it: every string already decided.
@@ -406,6 +440,14 @@ export interface RenderedRow {
   readonly headState: string;
   /** Line 3: `worktree`, `submodule`, `bare`, `shallow`. Absent for an ordinary repository. */
   readonly kind?: string;
+  /**
+   * Line 3: `2 PR`, `2 MR`, or absent.
+   *
+   * Absent both when nobody asked and when the answer was none: a row with
+   * nothing open has nothing to say there, and a `0 PR` would spend a field
+   * saying so on every repository in the directory.
+   */
+  readonly review?: string;
   /** The whole row, spelled out - every figure the glyphs abbreviate, and the absolute commit date. */
   readonly tooltip: string;
   /**

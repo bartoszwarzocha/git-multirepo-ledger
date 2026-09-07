@@ -389,9 +389,13 @@ function renderRow(row: RenderedRow, selected: boolean): string {
   // Line 3. Absent entirely for a row that has not been read, rather than
   // rendered empty: a blank line reads as a repository with no branch.
   const kind = row.kind !== undefined ? `<span class="kind">${escapeHtml(row.kind)}</span>` : '';
+  // Absent both when nobody asked and when nothing is open, which is why there
+  // is no zero here to render.
+  const review =
+    row.review !== undefined ? `<span class="review">${escapeHtml(row.review)}</span>` : '';
   const line3 =
-    row.headState.length > 0 || kind.length > 0
-      ? `<span class="l3"><span class="head-state">${escapeHtml(row.headState)}</span>${kind}</span>`
+    row.headState.length > 0 || kind.length > 0 || review.length > 0
+      ? `<span class="l3"><span class="head-state">${escapeHtml(row.headState)}</span>${kind}${review}</span>`
       : '';
 
   const reason =
@@ -649,6 +653,16 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
   color: var(--vscode-descriptionForeground);
 }
 .head-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review {
+  flex: none;
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--vscode-charts-green, #7fb98b);
+  color: var(--vscode-editor-background);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
 .kind {
   flex: none;
   padding: 0 4px;

@@ -33,6 +33,9 @@ import type {
   SortMode,
 } from './model/types.ts';
 import { readDirtyState, readRows } from './read/reader.ts';
+import { resetCliCache } from './forge/cli.ts';
+import { readReviewCounts, targetKey } from './forge/counts.ts';
+import { forgeKindOf, parseForgeTarget, type ForgeTarget } from './forge/remote.ts';
 import { filterRows, sortRows, tallyOf } from './view/order.ts';
 import { HistoryViewProvider, type HistoryRequest } from './view/historyPanel.ts';
 import { ListViewProvider, type PanelRequest } from './view/listPanel.ts';
@@ -265,6 +268,13 @@ export class LedgerController implements vscode.Disposable {
         if (generation === this.generation) {
           this.publish(false);
         }
+      }
+
+      // Last, and only when the reader has switched it on. Everything above is
+      // a local read; this is the one thing that leaves the machine, so it runs
+      // behind a board that is already complete and useful without it.
+      if (this.forgeEnabled()) {
+        await this.readReviews(collected, abort.signal, generation);
       }
     } catch (error) {
       log.error('pass failed', error);
@@ -633,6 +643,75 @@ export class LedgerController implements vscode.Disposable {
     return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_PAGE_SIZE;
   }
 
+
+  // -------------------------------------------------------------------------
+  // Review counts
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fill in open merge and pull request counts, batched by owner.
+   *
+   * Runs only when `repoLedger.forge.enabled` is on, and only over repositories
+   * whose remote points at a host this version has a client for. A repository
+   * the queries did not cover keeps `review` absent, which the row renders as
+   * silence - never as a zero, because "nobody asked" and "nothing is open" are
+   * different facts and only one of them is good news.
+   */
+  private async readReviews(
+    rows: RepositoryRow[],
+    signal: AbortSignal,
+    generation: number,
+  ): Promise<void> {
+    const targets = new Map<string, ForgeTarget>();
+    const byKey = new Map<string, RepositoryRow[]>();
+
+    for (const row of rows) {
+      const url = row.remoteUrl;
+      if (url === undefined) {
+        continue;
+      }
+      const target = parseForgeTarget(url);
+      if (!target || forgeKindOf(target.host) === undefined) {
+        continue;
+      }
+      const key = targetKey(target);
+      targets.set(key, target);
+      const existing = byKey.get(key);
+      if (existing) {
+        // Two working trees of the same repository - a linked worktree beside
+        // its main checkout - share one remote and one count, and asking twice
+        // would spend a query on an answer already held.
+        existing.push(row);
+      } else {
+        byKey.set(key, [row]);
+      }
+    }
+
+    if (targets.size === 0) {
+      return;
+    }
+
+    this.publish(true);
+    const states = await readReviewCounts({ targets, signal });
+    if (signal.aborted || generation !== this.generation) {
+      return;
+    }
+
+    for (const [key, state] of states) {
+      for (const row of byKey.get(key) ?? []) {
+        const at = rows.indexOf(row);
+        if (at >= 0) {
+          rows[at] = { ...row, review: state };
+        }
+      }
+    }
+    this.publish(false);
+  }
+
+  private forgeEnabled(): boolean {
+    return this.config.get<boolean>('forge.enabled', false);
+  }
+
   // -------------------------------------------------------------------------
   // Settings, watchers, commands
   // -------------------------------------------------------------------------
@@ -709,9 +788,13 @@ export class LedgerController implements vscode.Disposable {
 
   private registerCommands(): void {
     this.disposables.push(
-      vscode.commands.registerCommand('repoLedger.refresh', () =>
-        this.refresh({ rediscover: true }),
-      ),
+      vscode.commands.registerCommand('repoLedger.refresh', () => {
+        // Signing in to `gh` while the window is open should take effect on the
+        // next Refresh rather than on the next reload, and whether a tool is
+        // signed in is remembered for the session.
+        resetCliCache();
+        return this.refresh({ rediscover: true });
+      }),
       vscode.commands.registerCommand('repoLedger.openAdditionalRootsSetting', () =>
         vscode.commands.executeCommand(
           'workbench.action.openSettings',
@@ -735,7 +818,8 @@ export class LedgerController implements vscode.Disposable {
           this.schedulePass(true);
         } else if (
           event.affectsConfiguration('repoLedger.dirty.enabled') ||
-          event.affectsConfiguration('repoLedger.concurrency')
+          event.affectsConfiguration('repoLedger.concurrency') ||
+          event.affectsConfiguration('repoLedger.forge.enabled')
         ) {
           this.schedulePass();
         }

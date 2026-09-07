@@ -27,6 +27,7 @@ import * as path from 'node:path';
 
 import { normalizePath, pathKey, shortSha } from '../model/keys.ts';
 import type {
+  ReviewState,
   DiscoveredRepository,
   Divergence,
   FetchEvidence,
@@ -38,6 +39,7 @@ import type {
   RowState,
   WorkingTree,
 } from '../model/types.ts';
+import { forgeKindOf, parseForgeTarget, type ForgeKind } from '../forge/remote.ts';
 
 // ---------------------------------------------------------------------------
 // Relative dates
@@ -445,6 +447,32 @@ export function freshnessText(fetch: FetchEvidence, now: number): string | undef
  * still stated, in the tooltip, where it also gets the sentence it needs about
  * what it does to the divergence figures.
  */
+/**
+ * Line 3: `2 PR`, `2 MR`, or nothing.
+ *
+ * Nothing in three different cases, and that is the point of the type behind
+ * it: nobody asked (the forge layer is off, or this host has no client), the
+ * question failed, or the answer was none. The first two must not render as a
+ * zero, and the third has nothing worth a field - a board of forty rows each
+ * saying `0 PR` spends its narrowest line telling the reader nothing happened.
+ *
+ * The unpluralised form is deliberate. `2 PRs` and `1 PR` differ by a character
+ * that carries no information and costs a re-measure of the column, and every
+ * forge's own interface writes the abbreviation as a unit.
+ */
+export function reviewText(review: ReviewState | undefined, kind: ForgeKind | undefined): string | undefined {
+  if (review === undefined || review.kind === 'unavailable') {
+    return undefined;
+  }
+  if (review.open <= 0) {
+    return undefined;
+  }
+  // `41+` when the query stopped at its limit: a floor drawn as a total would
+  // be a number the extension never established.
+  const figure = review.atLeast === true ? `${review.open}+` : String(review.open);
+  return `${figure} ${kind === 'gitlab' ? 'MR' : 'PR'}`;
+}
+
 export function kindMarker(repository: DiscoveredRepository): string | undefined {
   if (repository.kind !== 'plain') {
     return repository.kind;
@@ -756,6 +784,8 @@ function tailOf(parts: readonly string[], count: number): string[] {
 // ---------------------------------------------------------------------------
 
 export interface RowOptions {
+  /** Which forge this repository points at, so the count is labelled PR or MR. */
+  forge?: ForgeKind;
   /**
    * The instant the row is rendered at, in milliseconds since the epoch.
    *
@@ -783,6 +813,7 @@ export function buildRow(row: RepositoryRow, options: RowOptions): RenderedRow {
   const dirty = dirtyText(row.workingTree);
   const freshness = freshnessText(row.fetch, options.now);
   const kind = kindMarker(repository);
+  const review = reviewText(row.review, options.forge);
 
   // Each optional field is spread in only when it exists, rather than assigned
   // as `undefined`. An absent key then means in the rendered row exactly what it
@@ -801,6 +832,7 @@ export function buildRow(row: RepositoryRow, options: RowOptions): RenderedRow {
     subject: subjectFor(row),
     headState: headStateText(row.head, row.operation),
     ...(kind ? { kind } : {}),
+    ...(review !== undefined ? { review } : {}),
     tooltip: tooltipFor(row, options.now),
     ...(row.failure ? { unreadableReason: unreadableText(row.failure) } : {}),
   };
@@ -811,6 +843,28 @@ export function buildRows(rows: readonly RepositoryRow[], now: number): Rendered
   const qualifiers = nameQualifiers(rows.map((row) => row.repository));
   return rows.map((row) => {
     const qualifier = qualifiers.get(pathKey(row.repository.path));
-    return buildRow(row, qualifier ? { now, qualifier } : { now });
+    const forge = forgeOf(row);
+    return buildRow(row, {
+      now,
+      ...(qualifier ? { qualifier } : {}),
+      ...(forge ? { forge } : {}),
+    });
   });
+}
+
+/**
+ * Which forge a row's remote points at, for the PR/MR label alone.
+ *
+ * Re-derived here rather than carried on the row: the row already holds the
+ * review count, and threading the forge kind alongside it would put the same
+ * fact in two places that could disagree. The parse is a string split and runs
+ * once per rendered row.
+ */
+function forgeOf(row: RepositoryRow): ForgeKind | undefined {
+  const url = row.remoteUrl;
+  if (url === undefined) {
+    return undefined;
+  }
+  const target = parseForgeTarget(url);
+  return target ? forgeKindOf(target.host) : undefined;
 }
