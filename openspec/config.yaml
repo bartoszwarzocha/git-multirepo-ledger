@@ -1,0 +1,91 @@
+schema: spec-driven
+
+context: |
+  ## Project: Repo Ledger
+
+  A VS Code extension that reads a *directory of git repositories* and answers, in one
+  glance, what state every one of them is in: what moved last, on which branch, how far
+  from its upstream, and what is waiting in review.
+
+  ## Why this exists
+
+  VS Code's Source Control view knows only the repositories inside the open folders, and
+  answers one question about them: which files are dirty. GitLens is excellent and deep
+  but is organised around one repository at a time. Nothing takes the *directory* as the
+  unit. With twenty repositories, "which of these moved" costs twenty context switches.
+
+  ## Measured baseline (E:\AI, 2026-09-07)
+
+  - 23 git repositories under one directory; 7 nested two or three levels down; one
+    repository inside another
+  - 13 of the 23 fail every git command with `fatal: detected dubious ownership`, exit 128,
+    because they were carried over from another Windows installation and are owned by its SID.
+    A mundane cause with a small consequence: exit 128 is a row state carrying a sentence, not
+    a blank row
+  - Process spawn dominates: `git --version` costs 77 ms median from Node, and
+    `git status --porcelain=v2 --branch` costs 71 ms — the same. Git's work is free at
+    this scale; starting the process is not
+  - One row costs three commands, ~276 ms serially; all 23 repositories at concurrency 8
+    take ~0.7 s warm (1.2 s cold), and the knee of the curve is at four
+
+  ## Tech Stack
+
+  - Language: TypeScript (strict), targeting the VS Code extension host (Node)
+  - UI: a webview for the repository list, because a three-line row is not a tree item;
+    the history pane below it
+  - Build: esbuild bundle to `dist/extension.js`, `vscode` external, no runtime dependencies
+  - Lint/types: eslint + `tsc --noEmit`
+  - Tests: `node --test "src/**/*.test.ts"`, plain node:test, no extension host
+  - Git access: the `git` CLI via `child_process`, never a JS git reimplementation
+  - Forge access: the `gh` and `glab` CLIs when present and authenticated; no tokens are
+    ever asked for or stored
+
+  ## Key Architecture Concepts
+
+  - **The directory is the unit.** Repositories are discovered at any depth beneath the
+    open folders and beneath configured absolute paths, whether or not they are open.
+  - **Spawn count is the budget.** Every design question reduces to how few git processes
+    a row costs. `git status --porcelain=v2 --branch` earns its place by answering branch,
+    upstream, divergence and dirtiness in one process.
+  - **An unreadable repository is a state, not an absence.** A directory that has collected
+    repositories from more than one source will hold some the current user did not create,
+    and git refuses those. The row says so and names the command that fixes it. Ordinary
+    error handling, sized as such - not a headline.
+  - **Everything is a read.** No staging, committing, pushing or merging. The extension
+    hands off to the tools already installed.
+  - **The network is opt-in.** Merge-request counts touch the network, so they ship
+    disabled, exactly as the sibling project's evidence layers do.
+
+  ## Sibling project
+
+  `E:\AI\openspec-ledger` is a finished, published extension by the same author. Its
+  conventions are the house style and its `src/util/git.ts`, `src/util/fsx.ts`,
+  `src/util/log.ts` and discovery walk are copied rather than re-derived. Code is copied,
+  not shared through a monorepo: two Marketplace extensions with a shared package is a
+  publishing coupling neither project needs.
+
+rules:
+  proposal:
+    - State what this does that VS Code's Source Control view and GitLens do not, in the first paragraph
+    - Every claim about the machine, the repositories or the cost must come from a measurement that is quoted
+    - Do not quote a Marketplace install count or a competitor's feature unless it has been checked
+    - Name the capabilities that will become spec files, one bullet each
+    - Include an Impact section covering spawn count, wall clock, and what touches the network
+  specs:
+    - Use WHEN/THEN scenarios for every requirement
+    - Every requirement must be observable from outside - a row's text, a command's result, a file on disk
+    - Cover the degenerate repositories explicitly - unreadable ownership, no commits, detached HEAD, mid-rebase, no remote, bare
+    - A count the extension has not established must never render as zero
+    - State what the row shows while an answer is still being fetched
+  design:
+    - Record each decision as D1, D2, ... with the alternative rejected and what goes wrong with it
+    - State the spawn count and the measured wall clock for every operation that touches git
+    - Justify webview versus TreeView for each surface rather than assuming either
+    - Name which files are copied from the sibling project verbatim and which are adapted
+    - Say what happens to an in-flight read when the user clicks a different repository
+  tasks:
+    - Break tasks into chunks of at most two hours
+    - Group by capability, ordered so each group ends in something runnable or testable
+    - The first group is discovery and the row read, because every surface renders their output
+    - Each task independently testable, with its test task adjacent
+    - The forge layer comes last and is switched off when it lands
