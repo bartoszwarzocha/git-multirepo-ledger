@@ -31,33 +31,75 @@ export class ReportPanel {
    * One panel, not one per press: a reader who runs the report three times in a
    * minute wants the newest answer, not three tabs of increasingly stale ones.
    */
+  /**
+   * The markdown the Copy button hands over, for whatever is on screen now.
+   *
+   * A field rather than a closed-over argument: the message handler is
+   * registered once, on the panel's first appearance, so a captured `markdown`
+   * would go on copying the very first report the panel ever showed - long
+   * after the period had been changed twice.
+   */
+  private static markdown = '';
+
+  /**
+   * Put the panel on screen before the answer exists.
+   *
+   * The read takes as long as it takes - one `git log` per repository, on
+   * somebody else's disk - and while it ran nothing appeared at all. A button
+   * that shows its result only when the result is complete is, for the whole
+   * of that wait, indistinguishable from a button that did nothing, so the
+   * reader presses it again.
+   *
+   * What goes up immediately is honest about being incomplete: the period it
+   * is reading, how many repositories it is reading, a bar that says work is
+   * happening, and outlines where the figures will be. No number is shown
+   * before it has been established - the placeholders hold no digits, because
+   * a nought that is really "not yet" is the one mistake this whole extension
+   * is written to avoid.
+   */
+  static open(period: string, windowPhrase: string, discovered: number): void {
+    const panel = ReportPanel.panel();
+    ReportPanel.markdown = '';
+    panel.title = `Multirepo Ledger — ${period}`;
+    panel.webview.html = renderReportLoadingHtml(windowPhrase, discovered, createNonce());
+    panel.reveal(panel.viewColumn, false);
+  }
+
   static show(report: ActivityReport, markdown: string): void {
-    const panel =
-      ReportPanel.current ??
-      vscode.window.createWebviewPanel(
-        'multirepoLedger.report',
-        'Multirepo Ledger — activity',
-        vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One,
-        { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true },
-      );
-
-    if (!ReportPanel.current) {
-      ReportPanel.current = panel;
-      panel.onDidDispose(() => {
-        ReportPanel.current = undefined;
-      });
-      panel.webview.onDidReceiveMessage((message: unknown) => {
-        if ((message as { type?: unknown } | null)?.type === 'copy') {
-          void vscode.env.clipboard.writeText(markdown).then(() => {
-            void vscode.window.showInformationMessage('The report was copied as Markdown.');
-          });
-        }
-      });
-    }
-
+    const panel = ReportPanel.panel();
+    ReportPanel.markdown = markdown;
     panel.title = `Multirepo Ledger — ${report.periodLabel}`;
     panel.webview.html = renderReportHtml(report, createNonce());
     panel.reveal(panel.viewColumn, false);
+  }
+
+  private static panel(): vscode.WebviewPanel {
+    const existing = ReportPanel.current;
+    if (existing) {
+      return existing;
+    }
+
+    const panel = vscode.window.createWebviewPanel(
+      'multirepoLedger.report',
+      'Multirepo Ledger — activity',
+      vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One,
+      { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true },
+    );
+    ReportPanel.current = panel;
+    panel.onDidDispose(() => {
+      ReportPanel.current = undefined;
+    });
+    panel.webview.onDidReceiveMessage((message: unknown) => {
+      if ((message as { type?: unknown } | null)?.type === 'copy') {
+        if (ReportPanel.markdown.length === 0) {
+          return;
+        }
+        void vscode.env.clipboard.writeText(ReportPanel.markdown).then(() => {
+          void vscode.window.showInformationMessage('The report was copied as Markdown.');
+        });
+      }
+    });
+    return panel;
   }
 
   static dispose(): void {
@@ -155,6 +197,86 @@ function renderCards(report: ActivityReport): string {
     card('Merges', String(report.merges)) +
     `</div>`
   );
+}
+
+/**
+ * A bar that says work is happening, without claiming to know how much is left.
+ *
+ * Indeterminate on purpose. The read is one `git log` per repository at a
+ * derived concurrency, and how far along it is says nothing useful about how
+ * long the rest will take - a progress bar that crawls to 90 per cent and sits
+ * there is worse than one that never claimed to be measuring.
+ */
+const BUSY_BAR = '<div class="busy" role="status" aria-label="Reading"><span></span></div>';
+
+function block(width: string, height = '13px'): string {
+  return `<span class="skel" style="width:${width};height:${height}"></span>`;
+}
+
+/**
+ * The report's own shape, drawn empty.
+ *
+ * A skeleton rather than a spinner, because the two answer different questions.
+ * A spinner says "wait"; this says "wait, and here is what is coming" - the
+ * cards, the chart and the two tables land where their outlines already are,
+ * so the page does not rearrange itself under the reader at the moment they
+ * start reading it.
+ *
+ * Not one digit anywhere. Every placeholder is a bar, never a `0` or a dash
+ * that could be mistaken for a figure that came back: a count nobody has
+ * established must never look like a count of none.
+ */
+export function renderReportLoadingHtml(
+  windowPhrase: string,
+  discovered: number,
+  nonce: string,
+): string {
+  const csp = [
+    "default-src 'none'",
+    `style-src 'nonce-${nonce}'`,
+    `script-src 'nonce-${nonce}'`,
+  ].join('; ');
+
+  const cards = ['Commits', 'Repositories', 'Authors', 'Merges']
+    .map(
+      (label) =>
+        `<div class="card"><span class="card-label">${escapeHtml(label)}</span>` +
+        `${block('44px', '22px')}</div>`,
+    )
+    .join('');
+
+  const table = (heading: string, rows: number): string =>
+    `<section><h2>${escapeHtml(heading)}</h2><div class="skel-rows">` +
+    Array.from({ length: rows }, (_, index) =>
+      // Ragged on purpose: a stack of identical bars reads as a broken layout,
+      // where uneven ones read as text that has not arrived.
+      `<div class="skel-row">${block(`${58 - index * 6}%`)}${block('34px')}${block('34px')}</div>`,
+    ).join('') +
+    `</div></section>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multirepo Ledger activity</title>
+<style nonce="${nonce}">${STYLES}</style>
+</head>
+<body class="loading">
+<header>
+<h1>Activity ${escapeHtml(windowPhrase)}</h1>
+<p class="subtitle">Reading ${discovered} ${discovered === 1 ? 'repository' : 'repositories'} — one <code>git log</code> each. Figures appear when every one of them has answered.</p>
+<button type="button" class="copy" disabled>Copy as Markdown</button>
+</header>
+${BUSY_BAR}
+<p class="lede">${block('42%')}</p>
+<div class="cards">${cards}</div>
+<div class="chart skel-chart">${block('100%', '170px')}</div>
+${table('Where the work went', 4)}
+${table('Who did it', 3)}
+</body>
+</html>`;
 }
 
 export function renderReportHtml(report: ActivityReport, nonce: string): string {
@@ -284,6 +406,32 @@ document.addEventListener('click', (event) => {
 
 const STYLES = `
 :root { color-scheme: light dark; }
+/* The bar and the outlines below it. Both are removed from the page entirely
+   once the figures arrive - they are not a state the finished report can be
+   in, so nothing has to be reset. */
+.busy { position: relative; overflow: hidden; height: 2px; margin: 10px 0 4px; background: var(--vscode-panel-border, rgba(128,128,128,0.3)); border-radius: 2px; }
+.busy > span { position: absolute; inset: 0 auto 0 0; width: 26%; background: var(--vscode-progressBar-background, var(--vscode-charts-blue, #3794ff)); animation: slide 1.5s ease-in-out infinite; }
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(390%); }
+}
+.skel { display: inline-block; border-radius: 3px; background: var(--vscode-foreground); opacity: 0.12; animation: breathe 1.8s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { opacity: 0.09; }
+  50% { opacity: 0.2; }
+}
+.skel-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.skel-row { display: flex; align-items: center; gap: 12px; }
+.skel-row .skel:first-child { flex: 0 1 auto; }
+.skel-chart { min-height: 170px; }
+.loading .card { min-height: 62px; }
+.copy[disabled] { opacity: 0.45; cursor: default; }
+/* Motion is decoration here: the bar's presence is the message, so a reader who
+   has asked for less of it still sees the state. */
+@media (prefers-reduced-motion: reduce) {
+  .busy > span { width: 100%; animation: none; opacity: 0.6; }
+  .skel { animation: none; opacity: 0.14; }
+}
 body {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);

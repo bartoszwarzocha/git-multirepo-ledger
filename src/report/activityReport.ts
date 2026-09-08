@@ -140,7 +140,7 @@ function cell(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
 
-function windowPhrase(period: ActivityPeriod): string {
+export function windowPhrase(period: ActivityPeriod): string {
   if (period === 'all') {
     return 'in all the history read';
   }

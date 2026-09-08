@@ -38,10 +38,15 @@ import type {
 import { readDirtyState, readRows } from './read/reader.ts';
 import { readActivity, type ActivityEntry, type ActivityFailure } from './read/activity.ts';
 import { fetchRepositories, fetchSentence } from './read/fetch.ts';
-import { buildActivityReport, renderActivityReport } from './report/activityReport.ts';
+import {
+  buildActivityReport,
+  renderActivityReport,
+  windowPhrase,
+} from './report/activityReport.ts';
 import { ReportPanel } from './view/reportPanel.ts';
 import {
   ACTIVITY_PERIODS,
+  PERIOD_LABELS,
   authorLabels,
   authorOf,
   authorsOf,
@@ -912,32 +917,40 @@ export class LedgerController implements vscode.Disposable {
     }
 
     const period = this.activityPeriod;
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'Multirepo Ledger: reading every repository' },
-      async () => {
-        const result = await readActivity({
-          repositories,
-          since: sinceFor(period),
-          concurrency: this.concurrency(),
-        });
-        // The same filters the pane is showing. A report that ignored them - which
-        // this one did - answers a question the reader did not ask, and its
-        // figures cannot be reconciled with what is on screen beside it.
-        const input = {
-          entries: filterActivity(result.entries, {
-            mergesOnly: this.activityMergesOnly,
-            ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
-          }),
-          failures: result.failures,
-          period,
-          discovered: repositories.length,
-          now: Date.now(),
-        };
-        // The panel renders the structure; the markdown rides along so the Copy
-        // button can hand over something that pastes into a stand-up note.
-        ReportPanel.show(buildActivityReport(input), renderActivityReport(input));
-      },
-    );
+
+    // On screen before the reading starts, not after it finishes. The read is
+    // one `git log` per repository and takes as long as somebody else's disk
+    // takes; while it ran, nothing appeared at all, so pressing the button and
+    // pressing nothing looked the same for several seconds. The panel now goes
+    // up immediately carrying what is already known - the period and how many
+    // repositories are being asked - and a bar that says the work is running.
+    //
+    // The window progress that used to stand in for this is gone with it: it
+    // reported the same thing in the corner of the editor, where a reader
+    // watching the space the report will appear in never saw it.
+    ReportPanel.open(PERIOD_LABELS[period], windowPhrase(period), repositories.length);
+
+    const result = await readActivity({
+      repositories,
+      since: sinceFor(period),
+      concurrency: this.concurrency(),
+    });
+    // The same filters the pane is showing. A report that ignored them - which
+    // this one did - answers a question the reader did not ask, and its
+    // figures cannot be reconciled with what is on screen beside it.
+    const input = {
+      entries: filterActivity(result.entries, {
+        mergesOnly: this.activityMergesOnly,
+        ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
+      }),
+      failures: result.failures,
+      period,
+      discovered: repositories.length,
+      now: Date.now(),
+    };
+    // The panel renders the structure; the markdown rides along so the Copy
+    // button can hand over something that pastes into a stand-up note.
+    ReportPanel.show(buildActivityReport(input), renderActivityReport(input));
   }
 
   private forgeEnabled(): boolean {
