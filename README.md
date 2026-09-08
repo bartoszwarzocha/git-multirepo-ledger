@@ -1,4 +1,6 @@
-# Multirepo Ledger
+# Git Multirepo Ledger
+
+![Git Multirepo Ledger](resources/screenshot.jpg)
 
 **Every other repository list tells you where each repository *is*. This one tells you when it last
 moved — and sorts by it.**
@@ -114,10 +116,15 @@ the five row hand-offs. All are recorded as deferred, with their reasons, in
 `openspec/changes/implement-multirepo-ledger/`. Nobody has yet run the empty and unusual states by hand
 in the Extension Development Host, which is the largest thing standing between this and a release.
 
-No screenshots, benchmarks or install counts appear above because none of them exist yet, and none
-will be added before they are true. The one number worth stating plainly: nothing comparable on the
-Marketplace has more than a few hundred installs, so this is built because its author wants it, not
-because demand for it has been demonstrated.
+The screenshot at the top is real, and it is not of anybody's work. It is taken against a directory
+of repositories built by `scripts/make-demo-workspace.ts` - invented products, invented people, and
+bare repositories standing in for remotes, so that every figure on it is derived by the extension
+from a real `.git` rather than drawn by hand. Run that script and you get the same board.
+
+No benchmarks or install counts appear above because neither exists yet, and neither will be added
+before it is true. The one number worth stating plainly: nothing comparable on the Marketplace has
+more than a few hundred installs, so this is built because its author wants it, not because demand
+for it has been demonstrated.
 
 ## Licence
 
