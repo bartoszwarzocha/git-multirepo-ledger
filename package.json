@@ -1,5 +1,5 @@
 {
-  "name": "multirepo-ledger",
+  "name": "git-multirepo-ledger",
   "displayName": "Git Multirepo Ledger",
   "description": "A status board for a whole directory of git repositories - multi-repo, multirepo, many repositories at once: what moved last, on which branch, how far from upstream, and what is waiting in review.",
   "version": "0.0.1",
@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bartoszwarzocha/multirepo-ledger.git"
+    "url": "https://github.com/bartoszwarzocha/git-multirepo-ledger.git"
   },
   "bugs": {
-    "url": "https://github.com/bartoszwarzocha/multirepo-ledger/issues"
+    "url": "https://github.com/bartoszwarzocha/git-multirepo-ledger/issues"
   },
-  "homepage": "https://github.com/bartoszwarzocha/multirepo-ledger#readme",
+  "homepage": "https://github.com/bartoszwarzocha/git-multirepo-ledger#readme",
   "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.104.0"
