@@ -369,19 +369,29 @@ function renderLens(model: ListModel): string {
     ` title="${escapeHtml(model.mergesOnly ? 'Count every commit' : 'Count only merges')}"` +
     ` aria-pressed="${model.mergesOnly ? 'true' : 'false'}">merges only</button>`;
 
+  // Always drawn, and labelled. It used to appear only when the current answer
+  // held more than one name, so on a quiet day - the very case where a reader
+  // asks "who did anything" - the control vanished, and a filter that is absent
+  // when the list is short is a filter nobody knows exists.
+  //
+  // A name the current range does not contain is kept in the list while it is
+  // chosen, so narrowing the range does not silently drop the filter and widen
+  // the result behind the reader's back.
+  const names = [...model.authors];
+  if (model.author !== undefined && !names.includes(model.author)) {
+    names.push(model.author);
+  }
   const authors =
-    model.authors.length > 1
-      ? `<select class="author" aria-label="Author">` +
-        `<option value=""${model.author === undefined ? ' selected' : ''}>Everyone</option>` +
-        model.authors
-          .map(
-            (author) =>
-              `<option value="${escapeHtml(author)}"${model.author === author ? ' selected' : ''}>` +
-              `${escapeHtml(author)}</option>`,
-          )
-          .join('') +
-        `</select>`
-      : '';
+    `<label class="author-label">Author<select class="author">` +
+    `<option value=""${model.author === undefined ? ' selected' : ''}>Everyone</option>` +
+    names
+      .map(
+        (author) =>
+          `<option value="${escapeHtml(author)}"${model.author === author ? ' selected' : ''}>` +
+          `${escapeHtml(author)}</option>`,
+      )
+      .join('') +
+    `</select></label>`;
 
   // Stated, because "no range" is otherwise indistinguishable from "the button
   // did not register": three unlit buttons look the same either way.
@@ -769,6 +779,15 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
   color: var(--vscode-list-activeSelectionForeground);
 }
 .toggle:focus-visible, .author:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.author-label {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 0.82em;
+  color: var(--vscode-descriptionForeground);
+}
 .author {
   flex: 1 1 auto; min-width: 0; padding: 1px 4px;
   border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));

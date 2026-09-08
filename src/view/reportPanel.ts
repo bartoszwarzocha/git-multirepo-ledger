@@ -71,31 +71,74 @@ function createNonce(): string {
 }
 
 /**
- * The commits-per-day bars.
+ * The commits-per-day bars, drawn as SVG.
  *
- * Drawn rather than tabulated because the shape of a week is the one thing a
- * table of the same numbers does not show: a reader sees three quiet days and a
- * Thursday without reading a single figure. The scale is stated on the tallest
- * bar so the height is never the only thing carrying the number.
+ * The shape of the period is the one thing a table of the same numbers does not
+ * show: three quiet days and a Thursday, read without taking in a figure.
+ *
+ * SVG rather than styled elements, which is what this was first. A column of
+ * divs whose heights are percentages of a flex parent depends on how the
+ * browser resolves a percentage against a flex item's own resolved height, and
+ * in a webview at an awkward width it resolved to nothing - a chart that is
+ * blank is worse than no chart, because the reader cannot tell it apart from a
+ * period with no commits. Here every coordinate is arithmetic done here, and
+ * the same numbers a test can assert on.
+ *
+ * Every bar carries its own count above it, so the height is never the only
+ * thing saying how many.
  */
-function renderBars(bars: readonly ReportBar[]): string {
+const CHART = {
+  height: 170,
+  top: 18,
+  bottom: 26,
+  gap: 6,
+  minBarWidth: 22,
+  maxBarWidth: 64,
+} as const;
+
+export function renderBars(bars: readonly ReportBar[]): string {
   if (bars.length === 0) {
     return '';
   }
+
+  const barWidth = Math.min(
+    CHART.maxBarWidth,
+    Math.max(CHART.minBarWidth, Math.round(640 / bars.length) - CHART.gap),
+  );
+  const step = barWidth + CHART.gap;
+  const width = Math.max(step * bars.length, 120);
+  const baseline = CHART.height - CHART.bottom;
+  const plot = baseline - CHART.top;
   const tallest = Math.max(...bars.map((bar) => bar.commits), 1);
+
   const columns = bars
-    .map((bar) => {
-      const height = Math.max(2, Math.round((bar.commits / tallest) * 100));
-      const label = `${bar.heading}: ${bar.commits} commit${bar.commits === 1 ? '' : 's'} in ${bar.repositories} repositor${bar.repositories === 1 ? 'y' : 'ies'}`;
+    .map((bar, index) => {
+      const x = index * step;
+      // A day with commits is never drawn as nothing: two pixels is the floor,
+      // so "one commit" and "none" are visibly different.
+      const height = bar.commits === 0 ? 0 : Math.max(2, Math.round((bar.commits / tallest) * plot));
+      const y = baseline - height;
+      const title =
+        `${bar.heading}: ${bar.commits} commit${bar.commits === 1 ? '' : 's'} in ` +
+        `${bar.repositories} repositor${bar.repositories === 1 ? 'y' : 'ies'}`;
       return (
-        `<div class="bar" title="${escapeHtml(label)}">` +
-        `<span class="bar-count">${bar.commits}</span>` +
-        `<span class="bar-fill" style="height:${height}%"></span>` +
-        `<span class="bar-label">${escapeHtml(bar.short)}</span></div>`
+        `<g><title>${escapeHtml(title)}</title>` +
+        (height > 0
+          ? `<rect class="bar" x="${x}" y="${y}" width="${barWidth}" height="${height}" rx="2"></rect>`
+          : '') +
+        `<text class="value" x="${x + barWidth / 2}" y="${y - 5}" text-anchor="middle">${bar.commits}</text>` +
+        `<text class="day" x="${x + barWidth / 2}" y="${baseline + 15}" text-anchor="middle">${escapeHtml(bar.short)}</text>` +
+        `</g>`
       );
     })
     .join('');
-  return `<div class="bars" role="img" aria-label="Commits per day">${columns}</div>`;
+
+  return (
+    `<div class="chart"><svg viewBox="0 0 ${width} ${CHART.height}" width="${width}" height="${CHART.height}"` +
+    ` role="img" aria-label="Commits per day">` +
+    `<line class="axis" x1="0" y1="${baseline}" x2="${width}" y2="${baseline}"></line>` +
+    `${columns}</svg></div>`
+  );
 }
 
 function renderCards(report: ActivityReport): string {
@@ -270,18 +313,18 @@ code { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.92
 .card-label { font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--vscode-descriptionForeground); }
 .card-value { font-size: 1.5em; font-variant-numeric: tabular-nums; }
 .card-note { font-size: 0.82em; color: var(--vscode-descriptionForeground); }
-/* The shape of the period, which the table of the same numbers cannot show.
-   Each bar states its own count, so the height is never the only carrier. */
-.bars {
-  display: flex; align-items: flex-end; gap: 6px;
-  height: 150px; margin: 18px 0 4px; padding-bottom: 20px;
-  border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-  overflow-x: auto;
+/* The chart scrolls rather than squeezing: at twenty days in a narrow editor a
+   squeezed bar is a bar nobody can compare. */
+.chart { overflow-x: auto; margin: 18px 0 4px; }
+.chart svg { display: block; max-width: 100%; height: auto; }
+.chart .axis { stroke: var(--vscode-panel-border, rgba(128,128,128,0.5)); stroke-width: 1; }
+.chart .bar { fill: var(--vscode-charts-blue, #3794ff); }
+.chart .value,
+.chart .day {
+  fill: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-font-family);
+  font-size: 11px;
 }
-.bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; flex: 1 0 26px; height: 100%; }
-.bar-fill { width: 100%; max-width: 46px; background: var(--vscode-charts-blue, #3794ff); border-radius: 2px 2px 0 0; }
-.bar-count { font-size: 0.8em; font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground); }
-.bar-label { position: absolute; bottom: -19px; font-size: 0.76em; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 .table-scroll { overflow-x: auto; margin-top: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
 th, td { padding: 4px 12px 4px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.25)); }
