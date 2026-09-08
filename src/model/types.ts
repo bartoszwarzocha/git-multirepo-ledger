@@ -639,7 +639,21 @@ export type HistoryStatus =
   /** At least one commit. */
   | { readonly kind: 'ready' };
 
+/**
+ * What the pane below the board is showing.
+ *
+ * Two questions, and they are not the same one: `selected` answers "what
+ * happened in this repository", which every git surface in the editor already
+ * answers, and `activity` answers "what happened across all of them", which
+ * none of them does. The second is why this extension exists, so it is a mode
+ * of the same pane rather than a screen a reader has to go and find.
+ */
+export type PaneMode = 'selected' | 'activity';
+
 export interface HistoryModel {
+  readonly mode: PaneMode;
+  /** Present in `activity` mode. */
+  readonly activity?: ActivityView;
   readonly status: HistoryStatus;
   readonly page?: HistoryPage;
   /** The commit whose file list is open. At most one is expanded at a time. */
@@ -648,6 +662,44 @@ export interface HistoryModel {
   readonly files?: readonly CommitFile[];
   /** A read is running behind what is on screen. */
   readonly busy: boolean;
+}
+
+/** The cross-repository digest, already grouped and counted. */
+export interface ActivityView {
+  /** `today`, `week`, `month` - the vocabulary lives in `view/activity.ts`. */
+  readonly period: string;
+  /** One sentence: how much landed, where, and by how many people. */
+  readonly summary: string;
+  /**
+   * Repositories that could not be read, named.
+   *
+   * Never folded into the summary: a digest that counted a repository it failed
+   * to read would report a quieter week than actually happened.
+   */
+  readonly unreadable?: string;
+  readonly days: readonly ActivityDayView[];
+  /** Every author present, for the filter. */
+  readonly authors: readonly string[];
+  readonly mergesOnly: boolean;
+  /** Absent means every author. */
+  readonly author?: string;
+}
+
+export interface ActivityDayView {
+  readonly heading: string;
+  readonly entries: readonly ActivityEntryView[];
+}
+
+export interface ActivityEntryView {
+  readonly repositoryPath: string;
+  readonly label: string;
+  readonly sha: string;
+  readonly shortSha: string;
+  /** `14:32`, in the reader's own timezone. */
+  readonly time: string;
+  readonly author: string;
+  readonly subject: string;
+  readonly merge: boolean;
 }
 
 // ---------------------------------------------------------------------------

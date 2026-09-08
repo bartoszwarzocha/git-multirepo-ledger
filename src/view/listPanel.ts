@@ -282,6 +282,17 @@ const CHIPS: ReadonlyArray<{ filter: FilterMode; key: keyof Tally; label: string
 ];
 
 function renderHeader(model: ListModel): string {
+  // The "all" chip is always drawn, and it is why the header can never be
+  // empty. A board where everything is clean and pushed has no other chip to
+  // show, and an empty header leaves a reader who filtered five minutes ago no
+  // way back and no sign that filtering exists at all.
+  const showingAll = model.filter === 'all';
+  const all =
+    `<button type="button" class="chip all${showingAll ? ' on' : ''}" data-filter="all"` +
+    ` title="${escapeHtml(showingAll ? `All ${model.tally.total} repositories` : 'Show all repositories')}"` +
+    ` aria-pressed="${showingAll ? 'true' : 'false'}">` +
+    `<span class="count">${model.tally.total}</span> all</button>`;
+
   const chips = CHIPS.filter((chip) => model.tally[chip.key] > 0).map((chip) => {
     const on = model.filter === chip.filter;
     const title = on ? `Showing only ${chip.label} — click to show all` : `Show only ${chip.label}`;
@@ -311,7 +322,7 @@ function renderHeader(model: ListModel): string {
     `</select>`;
 
   return (
-    `<header class="head"><div class="chips">${chips.join('')}${unknown}</div>` +
+    `<header class="head"><div class="chips">${all}${chips.join('')}${unknown}</div>` +
     `<div class="controls">${sort}</div>` +
     `${model.busy ? BUSY_BAR : ''}</header>`
   );
@@ -460,7 +471,7 @@ export function renderHtml(model: ListModel, nonce: string): string {
 
   const rendered = buildRows(model.rows, Date.now());
   const empty = rendered.length === 0;
-  const header = model.tally.total > 0 ? renderHeader(model) : '';
+  const header = model.status.kind === 'ready' ? renderHeader(model) : '';
   const body = empty
     ? `${header}${renderEmpty(model)}`
     : `${header}<div class="rows">${rendered
@@ -533,6 +544,9 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
   cursor: pointer;
 }
 .chip.quiet { cursor: default; opacity: 0.75; }
+/* The one chip that is always present, so the header is never empty and the way
+   back from a filter is always on screen. */
+.chip.all { font-weight: 600; }
 .chip:not(.quiet):hover { background: var(--vscode-toolbar-hoverBackground); }
 .chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 /* The active filter is stated, not merely implied by a shorter list. */

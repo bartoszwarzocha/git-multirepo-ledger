@@ -111,3 +111,29 @@ export function buildFile(file: CommitFile): RenderedFile {
 export function buildFiles(files: readonly CommitFile[]): RenderedFile[] {
   return files.map(buildFile);
 }
+
+/** `3 files changed`, or the singular. The count a reader wants before the list. */
+export function fileCountText(count: number): string {
+  return `${count} file${count === 1 ? '' : 's'} changed`;
+}
+
+/**
+ * What kind of commit this is, for the one thing a dense list needs most:
+ * telling them apart without reading them.
+ *
+ * A closed set rather than a colour chosen at the page, so the vocabulary is
+ * decided here and tested here. `merge` outranks the rest because it is the one
+ * kind whose contents are not its own; `tagged` outranks `local` because a
+ * released commit is a landmark and being unpushed is a state it can also be in.
+ */
+export type CommitKind = 'merge' | 'tagged' | 'local' | 'ordinary';
+
+export function commitKind(commit: RenderedCommit): CommitKind {
+  if (commit.mergeOf !== undefined) {
+    return 'merge';
+  }
+  if (commit.refs.some((ref) => ref.kind === 'tag')) {
+    return 'tagged';
+  }
+  return commit.unpushed ? 'local' : 'ordinary';
+}

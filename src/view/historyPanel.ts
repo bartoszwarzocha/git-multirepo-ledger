@@ -14,8 +14,8 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
-import type { CommitRefKind, HistoryModel } from '../model/types.ts';
-import { buildCommits, buildFiles, type RenderedCommit } from './historyRow.ts';
+import type { ActivityEntryView, CommitRefKind, HistoryModel } from '../model/types.ts';
+import { buildCommits, buildFiles, commitKind, fileCountText, type RenderedCommit } from './historyRow.ts';
 import { escapeHtml } from './listPanel.ts';
 
 export type HistoryRequest =
@@ -24,7 +24,13 @@ export type HistoryRequest =
   /** Open one file of a commit in the editor's diff. */
   | { readonly type: 'diff'; readonly sha: string; readonly path: string }
   /** Ask for the next page. */
-  | { readonly type: 'more' };
+  | { readonly type: 'more' }
+  /** Switch the pane between the selected repository and the digest. */
+  | { readonly type: 'mode'; readonly period?: string }
+  /** Narrow the digest. */
+  | { readonly type: 'activityFilter'; readonly mergesOnly?: boolean; readonly author?: string }
+  /** Open one commit of the digest, which lives in a repository of its own. */
+  | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string };
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = 'repoLedger.history';
@@ -34,7 +40,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private disposed = false;
 
-  private model: HistoryModel = { status: { kind: 'no-selection' }, busy: false };
+  private model: HistoryModel = { mode: 'selected', status: { kind: 'no-selection' }, busy: false };
 
   readonly onDidRequest: vscode.Event<HistoryRequest> = this.requested.event;
 
@@ -105,6 +111,34 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       case 'more':
         this.requested.fire({ type: 'more' });
         return;
+      case 'mode':
+        this.requested.fire(
+          typeof payload['period'] === 'string'
+            ? { type: 'mode', period: payload['period'] }
+            : { type: 'mode' },
+        );
+        return;
+      case 'activityFilter':
+        this.requested.fire({
+          type: 'activityFilter',
+          ...(typeof payload['mergesOnly'] === 'boolean'
+            ? { mergesOnly: payload['mergesOnly'] }
+            : {}),
+          ...(typeof payload['author'] === 'string' ? { author: payload['author'] } : {}),
+        });
+        return;
+      case 'openAt':
+        if (
+          typeof payload['repositoryPath'] === 'string' &&
+          typeof payload['sha'] === 'string'
+        ) {
+          this.requested.fire({
+            type: 'openAt',
+            repositoryPath: payload['repositoryPath'],
+            sha: payload['sha'],
+          });
+        }
+        return;
       case 'expand':
         if (typeof payload['sha'] === 'string') {
           this.requested.fire({ type: 'expand', sha: payload['sha'] });
@@ -155,7 +189,7 @@ function renderCommit(commit: RenderedCommit, model: HistoryModel): string {
 
   const files = open ? renderFiles(commit, model) : '';
 
-  return `<div class="commit${open ? ' open' : ''}">
+  return `<div class="commit kind-${commitKind(commit)}${open ? ' open' : ''}">
 <button type="button" class="commit-main" data-sha="${escapeHtml(commit.sha)}"
  title="${escapeHtml(commit.tooltip)}" aria-expanded="${open ? 'true' : 'false'}">
 <span class="c1"><span class="sha">${escapeHtml(commit.shortSha)}</span><span class="age">${escapeHtml(commit.age)}</span><span class="author">${escapeHtml(commit.author)}</span>${unpushed}${merge}</span>
@@ -176,6 +210,7 @@ function renderFiles(commit: RenderedCommit, model: HistoryModel): string {
   if (model.files.length === 0) {
     return `<div class="files"><p class="note">This commit changed no files.</p></div>`;
   }
+  const count = `<p class="note">${escapeHtml(fileCountText(model.files.length))}</p>`;
   const rows = buildFiles(model.files)
     .map(
       (file) =>
@@ -186,7 +221,7 @@ function renderFiles(commit: RenderedCommit, model: HistoryModel): string {
         `<span class="fname">${escapeHtml(file.name)}</span></button>`,
     )
     .join('');
-  return `<div class="files">${rows}</div>`;
+  return `<div class="files">${count}${rows}</div>`;
 }
 
 function renderEmpty(model: HistoryModel): string {
@@ -205,6 +240,90 @@ function renderEmpty(model: HistoryModel): string {
     case 'ready':
       return '';
   }
+}
+
+
+/**
+ * The mode strip: one repository, or all of them.
+ *
+ * Always drawn, in both modes, because the digest is the answer this extension
+ * exists to give and a mode nobody can see is a mode nobody uses. `Selected` is
+ * first because it is where a click on the board lands; the three periods are
+ * one word each, so the strip fits a narrow sidebar without a menu.
+ */
+function renderModes(model: HistoryModel): string {
+  const active = model.mode === 'activity' ? (model.activity?.period ?? '') : 'selected';
+  const button = (value: string, label: string, title: string): string => {
+    const on = active === value;
+    return (
+      `<button type="button" class="mode${on ? ' on' : ''}" data-mode="${escapeHtml(value)}"` +
+      ` title="${escapeHtml(title)}" aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(label)}</button>`
+    );
+  };
+  return (
+    `<nav class="modes" role="group" aria-label="What this pane shows">` +
+    button('selected', 'Selected', 'The repository selected above') +
+    button('today', 'Today', 'Everything that landed today, across every repository') +
+    button('week', '7 days', 'Everything from the last seven days, across every repository') +
+    button('month', '30 days', 'Everything from the last thirty days, across every repository') +
+    `</nav>`
+  );
+}
+
+function renderActivityEntry(entry: ActivityEntryView): string {
+  return (
+    `<button type="button" class="act${entry.merge ? ' merge' : ''}"` +
+    ` data-repo="${escapeHtml(entry.repositoryPath)}" data-sha="${escapeHtml(entry.sha)}"` +
+    ` title="${escapeHtml(`${entry.subject}\n\n${entry.shortSha} · ${entry.author} · ${entry.label}`)}">` +
+    `<span class="a1"><span class="time">${escapeHtml(entry.time)}</span>` +
+    `<span class="repo">${escapeHtml(entry.label)}</span>` +
+    `<span class="who">${escapeHtml(entry.author)}</span>` +
+    `${entry.merge ? '<span class="tag-merge">merge</span>' : ''}</span>` +
+    `<span class="a2">${escapeHtml(entry.subject)}</span></button>`
+  );
+}
+
+function renderActivity(model: HistoryModel): string {
+  const view = model.activity;
+  if (!view) {
+    return '<div class="empty"><p>Reading every repository…</p></div>';
+  }
+
+  const authors =
+    view.authors.length > 1
+      ? `<select class="author" aria-label="Author">` +
+        `<option value=""${view.author === undefined ? ' selected' : ''}>Everyone</option>` +
+        view.authors
+          .map(
+            (author) =>
+              `<option value="${escapeHtml(author)}"${view.author === author ? ' selected' : ''}>` +
+              `${escapeHtml(author)}</option>`,
+          )
+          .join('') +
+        `</select>`
+      : '';
+
+  const merges =
+    `<button type="button" class="toggle${view.mergesOnly ? ' on' : ''}" data-merges="${view.mergesOnly ? 'off' : 'on'}"` +
+    ` title="${escapeHtml(view.mergesOnly ? 'Show every commit' : 'Show only merges')}"` +
+    ` aria-pressed="${view.mergesOnly ? 'true' : 'false'}">merges only</button>`;
+
+  const body =
+    view.days.length === 0
+      ? `<div class="empty"><p>${escapeHtml(view.summary)}</p></div>`
+      : view.days
+          .map(
+            (day) =>
+              `<div class="day"><h2>${escapeHtml(day.heading)}</h2>` +
+              `${day.entries.map(renderActivityEntry).join('')}</div>`,
+          )
+          .join('');
+
+  return (
+    `<div class="digest"><p class="summary">${escapeHtml(view.summary)}</p>` +
+    `${view.unreadable ? `<p class="warn">${escapeHtml(view.unreadable)}</p>` : ''}` +
+    `<div class="filters">${merges}${authors}</div></div>${body}`
+  );
 }
 
 export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
@@ -234,9 +353,11 @@ export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
       : '';
 
   const body =
-    commits.length > 0
-      ? `${header}<div class="commits">${commits}</div>${more}`
-      : renderEmpty(model);
+    model.mode === 'activity'
+      ? renderActivity(model)
+      : commits.length > 0
+        ? `${header}<div class="commits">${commits}</div>${more}`
+        : renderEmpty(model);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -248,6 +369,7 @@ export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
 <style nonce="${nonce}">${STYLES}</style>
 </head>
 <body>
+${renderModes(model)}
 ${body}
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>
@@ -289,6 +411,100 @@ p { margin: 0 0 6px; }
 }
 @keyframes pulse { 0%,100% { opacity: 0.25; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .busy { animation: none; opacity: 0.8; } }
+/* One word per mode, and the strip is always on screen: the digest is the
+   answer this extension exists to give, and a mode nobody can see is one nobody
+   uses. */
+.modes {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 3px;
+  padding: 6px 8px;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
+}
+.mode {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+  border-radius: 4px;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 0.88em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mode:hover { background: var(--vscode-toolbar-hoverBackground); }
+.mode:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.mode.on {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-button-background, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-button-foreground, var(--vscode-list-activeSelectionForeground));
+  font-weight: 600;
+}
+.digest { padding: 8px 10px 6px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2)); }
+.summary { margin: 0 0 4px; font-weight: 600; }
+/* Named, not counted: a repository that could not be read is not a quiet one. */
+.warn { margin: 0 0 6px; font-size: 0.9em; color: var(--vscode-list-warningForeground, #cca700); }
+.filters { display: flex; gap: 6px; align-items: center; }
+.toggle {
+  margin: 0; padding: 1px 7px;
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+  border-radius: 4px; background: none; color: var(--vscode-descriptionForeground);
+  font: inherit; font-size: 0.88em; cursor: pointer; white-space: nowrap;
+}
+.toggle.on {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+.toggle:focus-visible, .author:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.author {
+  flex: 1 1 auto; min-width: 0; padding: 1px 4px;
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));
+  border-radius: 4px;
+  background: var(--vscode-dropdown-background, transparent);
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  font: inherit; font-size: 0.88em;
+}
+.day { display: flex; flex-direction: column; }
+.day h2 {
+  position: sticky; top: 33px; z-index: 1;
+  margin: 0; padding: 4px 10px 3px;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+  font-size: 0.82em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+.act {
+  display: grid; row-gap: 1px; width: 100%; box-sizing: border-box;
+  margin: 0; padding: 4px 10px 5px;
+  border: none; border-left: 2px solid transparent; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.act:hover { background: var(--vscode-list-hoverBackground); }
+.act:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+/* A merge is the one entry whose contents are not its own, so it is tinted
+   rather than left to be told apart by reading it. */
+.act.merge {
+  background: color-mix(in srgb, var(--vscode-charts-purple, #9a7bd0) 12%, transparent);
+  border-left-color: var(--vscode-charts-purple, #9a7bd0);
+}
+.a1 { display: flex; align-items: baseline; gap: 7px; min-width: 0; font-size: 0.86em; color: var(--vscode-descriptionForeground); }
+.time { flex: none; font-variant-numeric: tabular-nums; font-family: var(--vscode-editor-font-family); }
+.repo { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-weight: 600; }
+.who { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-merge { flex: none; margin-left: auto; padding: 0 4px; border-radius: 3px; background: var(--vscode-charts-purple, #9a7bd0); color: var(--vscode-editor-background); font-size: 0.9em; }
+.a2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The same idea in the single-repository history: the kind of commit is visible
+   before it is read. */
+.commit.kind-merge { background: color-mix(in srgb, var(--vscode-charts-purple, #9a7bd0) 10%, transparent); }
+.commit.kind-tagged { background: color-mix(in srgb, var(--vscode-charts-yellow, #d0a54a) 10%, transparent); }
+.commit.kind-local { background: color-mix(in srgb, var(--vscode-charts-blue, #4a8cd8) 8%, transparent); }
 .commits { display: flex; flex-direction: column; }
 .commit + .commit { border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.16)); }
 .commit.open { background: var(--vscode-list-hoverBackground); }
@@ -415,9 +631,39 @@ window.addEventListener('scroll', () => {
   api.setState({ scrollTop: window.scrollY });
 }, { passive: true });
 
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement && target.classList.contains('author')) {
+    api.postMessage({ type: 'activityFilter', author: target.value });
+  }
+});
+
 document.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) { return; }
+
+  const mode = target.closest('button[data-mode]');
+  if (mode) {
+    const value = mode.getAttribute('data-mode');
+    api.postMessage(value === 'selected' ? { type: 'mode' } : { type: 'mode', period: value });
+    return;
+  }
+
+  const merges = target.closest('button[data-merges]');
+  if (merges) {
+    api.postMessage({ type: 'activityFilter', mergesOnly: merges.getAttribute('data-merges') === 'on' });
+    return;
+  }
+
+  const act = target.closest('button.act');
+  if (act) {
+    api.postMessage({
+      type: 'openAt',
+      repositoryPath: act.getAttribute('data-repo'),
+      sha: act.getAttribute('data-sha'),
+    });
+    return;
+  }
 
   const file = target.closest('button.file');
   if (file) {

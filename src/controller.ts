@@ -20,12 +20,14 @@ import type { DiscoveryInput } from './discovery/repositories.ts';
 import { createWorkspaceSearcher } from './discovery/vscodeSearch.ts';
 import { pathKey } from './model/keys.ts';
 import type {
+  ActivityView,
   Commit,
   CommitFile,
   DiscoveredRepository,
   FilterMode,
   HistoryModel,
   HistoryStatus,
+  PaneMode,
   ListModel,
   ListStatus,
   RepositoryRow,
@@ -33,6 +35,18 @@ import type {
   SortMode,
 } from './model/types.ts';
 import { readDirtyState, readRows } from './read/reader.ts';
+import { readActivity, type ActivityEntry } from './read/activity.ts';
+import {
+  ACTIVITY_PERIODS,
+  authorsOf,
+  failureSentence,
+  filterActivity,
+  groupByDay,
+  sinceFor,
+  summarise,
+  timeOf,
+  type ActivityPeriod,
+} from './view/activity.ts';
 import { resetCliCache } from './forge/cli.ts';
 import { readReviewCounts, targetKey } from './forge/counts.ts';
 import { forgeKindOf, parseForgeTarget, type ForgeTarget } from './forge/remote.ts';
@@ -80,6 +94,14 @@ export class LedgerController implements vscode.Disposable {
   private historyAbort: AbortController | undefined;
   private historyGeneration = 0;
   private filesGeneration = 0;
+  private paneMode: PaneMode = 'selected';
+  private activityPeriod: ActivityPeriod = 'week';
+  private activityEntries: ActivityEntry[] = [];
+  private activityFailures = '';
+  private activityMergesOnly = false;
+  private activityAuthor: string | undefined;
+  private activityAbort: AbortController | undefined;
+  private activityGeneration = 0;
   private generation = 0;
 
   private passTimer: NodeJS.Timeout | undefined;
@@ -134,6 +156,7 @@ export class LedgerController implements vscode.Disposable {
     this.disposed = true;
     this.passAbort?.abort();
     this.historyAbort?.abort();
+    this.activityAbort?.abort();
     if (this.passTimer) {
       clearTimeout(this.passTimer);
     }
@@ -336,6 +359,9 @@ export class LedgerController implements vscode.Disposable {
     switch (request.type) {
       case 'refresh':
         await this.refresh({ rediscover: true });
+        if (this.paneMode === 'activity') {
+          await this.loadActivity();
+        }
         return;
       case 'sort':
         await this.context.workspaceState.update(SORT_KEY, request.sort);
@@ -382,6 +408,7 @@ export class LedgerController implements vscode.Disposable {
     // no row look identical on screen, and the log is what tells them apart.
     log.info(row ? `selected ${row.repository.label}` : `selected a path no row holds: ${target}`);
     this.selectedPath = row ? row.repository.path : undefined;
+    this.paneMode = 'selected';
     this.publish(this.passRunning);
     this.history.reveal();
     void this.loadHistory(row, 0);
@@ -549,6 +576,36 @@ export class LedgerController implements vscode.Disposable {
       case 'diff':
         await this.openDiff(request.sha, request.path);
         return;
+      case 'mode': {
+        const period = request.period;
+        if (period === undefined) {
+          this.paneMode = 'selected';
+          this.publishHistory(
+            this.historySelection ? { kind: 'ready' } : { kind: 'no-selection' },
+            false,
+          );
+          return;
+        }
+        if (!(ACTIVITY_PERIODS as readonly string[]).includes(period)) {
+          return;
+        }
+        this.paneMode = 'activity';
+        this.activityPeriod = period as ActivityPeriod;
+        await this.loadActivity();
+        return;
+      }
+      case 'activityFilter':
+        if (request.mergesOnly !== undefined) {
+          this.activityMergesOnly = request.mergesOnly;
+        }
+        if (request.author !== undefined) {
+          this.activityAuthor = request.author.length > 0 ? request.author : undefined;
+        }
+        this.publishActivity(false);
+        return;
+      case 'openAt':
+        await this.openFromDigest(request.repositoryPath, request.sha);
+        return;
     }
   }
 
@@ -585,6 +642,61 @@ export class LedgerController implements vscode.Disposable {
       log.error(`could not list the files of ${sha}: ${result.failure.stderr}`);
     }
     this.publishHistory({ kind: 'ready' }, false);
+
+    // Selecting a commit opens what it changed, in the editor, which is what
+    // the pane is for: the list of files below stays as the way to reach one
+    // file on its own, and the multi-file diff is the whole commit at once.
+    await this.openCommitDiff(sha, result.files);
+  }
+
+  /**
+   * Open every file a commit changed, as one multi-file diff in the editor.
+   *
+   * `vscode.changes` is the same editor the built-in Git extension opens for a
+   * commit, so a reader gets the surface they already know rather than a second
+   * one this extension invented. Each entry is the file's own path - which is
+   * what the editor labels the entry with - and the two sides to compare.
+   *
+   * Rejected: opening one `vscode.diff` per changed file, which is what an
+   * earlier version did through the file list alone. A commit touching thirty
+   * files would open thirty tabs, and the reader asked to see a commit rather
+   * than to be handed its files one at a time.
+   *
+   * A merge opens nothing: `diff-tree` reports no files for it without being
+   * told which parent to compare against, and picking one silently would show a
+   * diff that is true against one side and misleading against the other.
+   */
+  private async openCommitDiff(sha: string, files: readonly CommitFile[]): Promise<void> {
+    const row = this.historySelection;
+    if (!row || files.length === 0) {
+      return;
+    }
+    const commit = this.commits.find((entry) => entry.sha === sha);
+    if (commit && commit.parents.length > 1) {
+      return;
+    }
+    const repo = row.repository.path;
+    const parent = commit?.parents[0] ?? '';
+    const short = commit?.shortSha ?? sha.slice(0, 7);
+
+    const changes = files.map((file) => [
+      // The label the editor shows. A file the commit deleted no longer exists
+      // on disk, and naming it by its own path is still what the reader is
+      // looking for in the list.
+      vscode.Uri.file(path.join(repo, file.path)),
+      // A file this commit added has no previous revision: the empty side is
+      // asked for by an empty object id, which is what git shows too.
+      blobUri(repo, file.status === 'A' ? '' : parent, file.oldPath ?? file.path),
+      blobUri(repo, file.status === 'D' ? '' : sha, file.path),
+    ]);
+
+    const title = commit ? `${commit.subject} (${short})` : short;
+    try {
+      await vscode.commands.executeCommand('vscode.changes', title, changes);
+    } catch (error) {
+      log.error('could not open the commit diff', error);
+      void vscode.window.showErrorMessage(`Repo Ledger could not open the diff for ${short}.`);
+    }
   }
 
   /**
@@ -622,8 +734,13 @@ export class LedgerController implements vscode.Disposable {
   }
 
   private publishHistory(status: HistoryStatus, busy: boolean): void {
+    if (this.paneMode === 'activity') {
+      this.publishActivity(busy);
+      return;
+    }
     const row = this.historySelection;
     const model: HistoryModel = {
+      mode: 'selected',
       status,
       busy,
       ...(row && this.commits.length > 0
@@ -715,6 +832,121 @@ export class LedgerController implements vscode.Disposable {
 
   private forgeEnabled(): boolean {
     return this.config.get<boolean>('forge.enabled', false);
+  }
+
+
+  // -------------------------------------------------------------------------
+  // The cross-repository digest
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read every repository's recent commits and publish them as one list.
+   *
+   * This is the question no other surface in the editor answers, and it is why
+   * the pane has two modes rather than one. One `git log` per repository, at the
+   * same derived concurrency as the board, and nothing cached: a stale answer to
+   * "what landed today" is worse than a slow one.
+   */
+  private async loadActivity(): Promise<void> {
+    this.activityAbort?.abort();
+    const abort = new AbortController();
+    this.activityAbort = abort;
+    const token = ++this.activityGeneration;
+
+    const repositories = this.cache.current ?? [];
+    if (repositories.length === 0) {
+      this.activityEntries = [];
+      this.activityFailures = '';
+      this.publishActivity(false);
+      return;
+    }
+
+    this.publishActivity(true);
+
+    const result = await readActivity({
+      repositories,
+      since: sinceFor(this.activityPeriod),
+      signal: abort.signal,
+      concurrency: this.concurrency(),
+    });
+    if (token !== this.activityGeneration || abort.signal.aborted) {
+      return;
+    }
+
+    this.activityEntries = result.entries;
+    this.activityFailures = failureSentence(result.failures) ?? '';
+    log.info(
+      `digest: ${result.entries.length} commits from ${result.asked} of ${repositories.length} repositories`,
+    );
+    this.publishActivity(false);
+  }
+
+  private publishActivity(busy: boolean): void {
+    const filtered = filterActivity(this.activityEntries, {
+      mergesOnly: this.activityMergesOnly,
+      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+    });
+    const summary = summarise(filtered, this.activityPeriod);
+
+    const activity: ActivityView = {
+      period: this.activityPeriod,
+      summary: summary.sentence,
+      ...(this.activityFailures.length > 0 ? { unreadable: this.activityFailures } : {}),
+      days: groupByDay(filtered, Date.now()).map((day) => ({
+        heading: day.heading,
+        entries: day.entries.map((entry) => ({
+          repositoryPath: entry.repositoryPath,
+          label: entry.label,
+          sha: entry.commit.sha,
+          shortSha: entry.commit.shortSha,
+          time: timeOf(entry.commit.committedAt),
+          author: entry.commit.author,
+          subject: entry.commit.subject,
+          merge: entry.commit.parents.length > 1,
+        })),
+      })),
+      // Offered from the unfiltered set, so choosing an author does not remove
+      // every other name from the control that chose them.
+      authors: authorsOf(this.activityEntries),
+      mergesOnly: this.activityMergesOnly,
+      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+    };
+
+    this.history.setModel({ mode: 'activity', activity, status: { kind: 'ready' }, busy });
+  }
+
+  /**
+   * Open a commit that belongs to a repository other than the selected one.
+   *
+   * The digest spans every repository, so a click in it has to carry where the
+   * commit lives; the single-repository pane never needs that because the
+   * selection already says it.
+   */
+  private async openFromDigest(repositoryPath: string, sha: string): Promise<void> {
+    const files = await readCommitFiles({ cwd: repositoryPath, sha });
+    if (files.failure) {
+      log.error(`could not list the files of ${sha}: ${files.failure.stderr}`);
+      void vscode.window.showErrorMessage(
+        `Repo Ledger could not read ${sha.slice(0, 7)} in ${repositoryPath}.`,
+      );
+      return;
+    }
+    if (files.files.length === 0) {
+      void vscode.window.showInformationMessage(
+        `${sha.slice(0, 7)} is a merge, so its changes belong to its parents.`,
+      );
+      return;
+    }
+    const changes = files.files.map((file) => [
+      vscode.Uri.file(path.join(repositoryPath, file.path)),
+      blobUri(repositoryPath, file.status === 'A' ? '' : `${sha}^`, file.oldPath ?? file.path),
+      blobUri(repositoryPath, file.status === 'D' ? '' : sha, file.path),
+    ]);
+    try {
+      await vscode.commands.executeCommand('vscode.changes', sha.slice(0, 7), changes);
+    } catch (error) {
+      log.error('could not open the commit diff', error);
+    }
   }
 
   // -------------------------------------------------------------------------
