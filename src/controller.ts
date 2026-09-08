@@ -36,7 +36,8 @@ import type {
 } from './model/types.ts';
 import { readDirtyState, readRows } from './read/reader.ts';
 import { readActivity, type ActivityEntry, type ActivityFailure } from './read/activity.ts';
-import { renderActivityReport } from './report/activityReport.ts';
+import { buildActivityReport, renderActivityReport } from './report/activityReport.ts';
+import { ReportPanel } from './view/reportPanel.ts';
 import {
   ACTIVITY_PERIODS,
   authorsOf,
@@ -178,6 +179,7 @@ export class LedgerController implements vscode.Disposable {
       clearTimeout(this.passTimer);
     }
     this.cache.cancel();
+    ReportPanel.dispose();
     this.disposeWatchers();
     for (const item of this.disposables.splice(0, this.disposables.length)) {
       item.dispose();
@@ -878,18 +880,16 @@ export class LedgerController implements vscode.Disposable {
           since: sinceFor(period),
           concurrency: this.concurrency(),
         });
-        const markdown = renderActivityReport({
+        const input = {
           entries: result.entries,
           failures: result.failures,
           period,
           discovered: repositories.length,
           now: Date.now(),
-        });
-        const document = await vscode.workspace.openTextDocument({
-          language: 'markdown',
-          content: markdown,
-        });
-        await vscode.window.showTextDocument(document, { preview: false });
+        };
+        // The panel renders the structure; the markdown rides along so the Copy
+        // button can hand over something that pastes into a stand-up note.
+        ReportPanel.show(buildActivityReport(input), renderActivityReport(input));
       },
     );
   }

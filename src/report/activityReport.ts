@@ -6,10 +6,10 @@
  * anything up. This is the same data arranged to be read rather than scanned -
  * per repository, per author, per day - in a window with room for a table.
  *
- * Markdown rather than a webview: it opens in the editor the reader already
- * has, it can be saved, pasted into a stand-up note or a pull request, and
- * diffed against last week's. A webview would look better and could do none of
- * those.
+ * Two renderings from one decision. `buildActivityReport` produces the figures
+ * the panel draws; `renderActivityReport` produces the same thing as markdown,
+ * which is what the panel's Copy button hands over so the report can be pasted
+ * into a stand-up note or diffed against last week's.
  *
  * Nothing here imports `vscode`, so every count and every sentence is decided
  * in a module a test can call.
@@ -18,6 +18,75 @@
 import type { ActivityEntry, ActivityFailure } from '../read/activity.ts';
 import { relativeAge } from '../view/row.ts';
 import { PERIOD_LABELS, groupByDay, timeOf, type ActivityPeriod } from '../view/activity.ts';
+
+/** One bar of the commits-per-day chart. */
+export interface ReportBar {
+  readonly heading: string;
+  /** The heading shortened for an axis label: `Mon`, `08-31`. */
+  readonly short: string;
+  readonly commits: number;
+  readonly repositories: number;
+}
+
+export interface ReportRepositoryRow {
+  readonly label: string;
+  readonly commits: number;
+  readonly merges: number;
+  readonly authors: number;
+  readonly last: string;
+}
+
+export interface ReportAuthorRow {
+  readonly author: string;
+  readonly commits: number;
+  readonly merges: number;
+  readonly repositories: number;
+  readonly last: string;
+}
+
+export interface ReportEntry {
+  readonly time: string;
+  readonly label: string;
+  readonly subject: string;
+  readonly author: string;
+  readonly shortSha: string;
+  readonly merge: boolean;
+}
+
+export interface ReportDay {
+  readonly heading: string;
+  readonly entries: readonly ReportEntry[];
+}
+
+export interface ReportFailureRow {
+  readonly label: string;
+  /** git's own first line, quoted rather than paraphrased. */
+  readonly reason: string;
+}
+
+/**
+ * The report, decided.
+ *
+ * Every figure, ordering and sentence is settled here so the panel places
+ * strings and nothing else - the same rule the board and the digest follow.
+ */
+export interface ActivityReport {
+  readonly periodLabel: string;
+  /** `today`, `in the last 7 days`, `in all the history read`. */
+  readonly windowPhrase: string;
+  readonly summary: string;
+  readonly generatedFor: string;
+  readonly commits: number;
+  readonly merges: number;
+  readonly discovered: number;
+  readonly repositories: readonly ReportRepositoryRow[];
+  readonly authors: readonly ReportAuthorRow[];
+  readonly days: readonly ReportDay[];
+  readonly bars: readonly ReportBar[];
+  readonly failures: readonly ReportFailureRow[];
+  /** The sentence above the unreadable table. Empty when nothing failed. */
+  readonly failureLede: string;
+}
 
 export interface ReportInput {
   readonly entries: readonly ActivityEntry[];
@@ -55,6 +124,9 @@ function cell(value: string): string {
 }
 
 function windowPhrase(period: ActivityPeriod): string {
+  if (period === 'all') {
+    return 'in all the history read';
+  }
   return period === 'today' ? 'today' : `in the last ${PERIOD_LABELS[period]}`;
 }
 
@@ -220,4 +292,86 @@ export function renderActivityReport(input: ReportInput): string {
 
   lines.push('');
   return lines.join('\n') + '\n';
+}
+
+/**
+ * The same read, decided once, for the panel.
+ *
+ * `renderActivityReport` above still produces the markdown, because the panel's
+ * Copy button hands it over and because a report that cannot leave the editor
+ * is half a report. Both are built from this.
+ */
+export function buildActivityReport(input: ReportInput): ActivityReport {
+  const { entries, failures, period, discovered, now } = input;
+  const repositories = byRepository(entries);
+  const authors = byAuthor(entries);
+  const days = groupByDay(entries, now);
+  const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
+
+  const summary =
+    entries.length === 0
+      ? `Nothing landed ${windowPhrase(period)} in any of the ${plural(discovered, 'repository', 'repositories')} that were read.`
+      : `${plural(entries.length, 'commit')} in ${plural(repositories.length, 'repository', 'repositories')}, ` +
+        `by ${plural(authors.length, 'author')}` +
+        `${merges > 0 ? `, including ${plural(merges, 'merge')}` : ''}.`;
+
+  const generated = new Date(now);
+  const stamp =
+    `${generated.getFullYear()}-${String(generated.getMonth() + 1).padStart(2, '0')}-` +
+    `${String(generated.getDate()).padStart(2, '0')} ` +
+    `${String(generated.getHours()).padStart(2, '0')}:${String(generated.getMinutes()).padStart(2, '0')}`;
+
+  return {
+    periodLabel: PERIOD_LABELS[period],
+    windowPhrase: windowPhrase(period),
+    summary,
+    generatedFor: `Read ${stamp} from ${plural(discovered, 'repository', 'repositories')}`,
+    commits: entries.length,
+    merges,
+    discovered,
+    repositories: repositories.map((repository) => ({
+      label: repository.label,
+      commits: repository.commits,
+      merges: repository.merges,
+      authors: repository.authors.size,
+      last: relativeAge(repository.latest, now),
+    })),
+    authors: authors.map((author) => ({
+      author: author.author,
+      commits: author.commits,
+      merges: author.merges,
+      repositories: author.repositories.size,
+      last: relativeAge(author.latest, now),
+    })),
+    days: days.map((day) => ({
+      heading: day.heading,
+      entries: day.entries.map((entry) => ({
+        time: timeOf(entry.commit.committedAt),
+        label: entry.label,
+        subject: entry.commit.subject,
+        author: entry.commit.author,
+        shortSha: entry.commit.shortSha,
+        merge: entry.commit.parents.length > 1,
+      })),
+    })),
+    // Oldest first, so the chart reads left to right the way a calendar does -
+    // the opposite of the list below it, which leads with what is newest.
+    bars: [...days].reverse().map((day) => ({
+      heading: day.heading,
+      short: day.heading === 'Today' || day.heading === 'Yesterday' ? day.heading : day.date.slice(5),
+      commits: day.entries.length,
+      repositories: new Set(day.entries.map((entry) => entry.repositoryPath)).size,
+    })),
+    failures: [...failures]
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map((failure) => ({
+        label: failure.label,
+        reason: failure.stderr.split('\n')[0] ?? 'no reason given',
+      })),
+    failureLede:
+      failures.length === 0
+        ? ''
+        : `${plural(failures.length, 'repository', 'repositories')} could not be read, and nothing from ` +
+          `${failures.length === 1 ? 'it' : 'them'} is counted anywhere above.`,
+  };
 }
