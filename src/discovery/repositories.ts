@@ -38,11 +38,11 @@ export type WorkspaceSearch = (signal?: AbortSignal) => Promise<RepositoryCandid
 export interface DiscoveryInput {
   /** Absolute paths of the open folders. Empty is a normal state, not an error. */
   workspaceFolders: readonly string[];
-  /** Raw `repoLedger.additionalRoots` value. */
+  /** Raw `multirepoLedger.additionalRoots` value. */
   additionalRoots: readonly string[];
-  /** Raw `repoLedger.exclude` value. */
+  /** Raw `multirepoLedger.exclude` value. */
   exclude?: readonly string[];
-  /** `repoLedger.maxDepth`; the walk applies its own default when this is absent. */
+  /** `multirepoLedger.maxDepth`; the walk applies its own default when this is absent. */
   maxDepth?: number;
   /** Omitted means no index search - which is what every test, and every window with no folder open, gets. */
   searchWorkspace?: WorkspaceSearch;
@@ -151,7 +151,7 @@ function runWalk(
  *
  * The three filters run in a fixed order, and the order is a decision rather
  * than an accident: nesting is judged against the *merged* set and before
- * `repoLedger.exclude` is applied, so that excluding a repository can only ever
+ * `multirepoLedger.exclude` is applied, so that excluding a repository can only ever
  * remove rows. Judging it afterwards would mean excluding an outer repository
  * made the vendored clone inside it appear, which is a setting producing the
  * opposite of what it says.
@@ -234,7 +234,7 @@ function normalize(candidate: RepositoryCandidate): RepositoryCandidate {
  * does not.
  *
  * The exception is the user. Naming the inner repository, or a directory
- * between it and the enclosing working tree, in `repoLedger.additionalRoots` is
+ * between it and the enclosing working tree, in `multirepoLedger.additionalRoots` is
  * how somebody asks for a row the walk would otherwise decline to look for.
  * Naming the enclosing repository itself is not that request: it asks for that
  * repository, which is exactly what it gets.
@@ -260,7 +260,7 @@ function nestedCandidates(
     }
     nested.add(key);
     log.info(
-      `${candidate.worktreePath} sits inside ${enclosing} and gets no row of its own; name it, or a directory above it, in repoLedger.additionalRoots to see it`,
+      `${candidate.worktreePath} sits inside ${enclosing} and gets no row of its own; name it, or a directory above it, in multirepoLedger.additionalRoots to see it`,
     );
   }
   return nested;
@@ -324,7 +324,7 @@ function underExcludedDirectoryName(target: string, folders: readonly string[]):
 }
 
 /**
- * Whether `repoLedger.exclude` removes this repository.
+ * Whether `multirepoLedger.exclude` removes this repository.
  *
  * A configured path removes the repository at it *and* everything beneath it.
  * The setting is described as a list of repositories, and matching each path
@@ -429,7 +429,7 @@ async function resolveAdditionalRoots(
 }
 
 /**
- * `repoLedger.exclude`, resolved the same way the roots are.
+ * `multirepoLedger.exclude`, resolved the same way the roots are.
  *
  * A configured path that is not there is deliberately *not* reported here, and
  * the asymmetry with the roots is the point: a root that does not exist is a

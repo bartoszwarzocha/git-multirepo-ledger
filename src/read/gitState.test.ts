@@ -85,7 +85,7 @@ function gitExpectingFailure(cwd: string, args: string[]): void {
 }
 
 async function makeTempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repo-ledger-gitstate-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'multirepo-ledger-gitstate-'));
   // git reports the resolved path, and the temp directory is a link on macOS.
   return fs.realpath(dir);
 }

@@ -1,8 +1,8 @@
-# Design — implement-repo-ledger
+# Design — implement-multirepo-ledger
 
 ## Context
 
-Repo Ledger reads a directory full of git repositories and shows the state of every one of them
+Multirepo Ledger reads a directory full of git repositories and shows the state of every one of them
 at a glance, without opening any of them. Two views in one Activity Bar container: a list on top,
 three lines per repository; a history pane below it, driven by the selected row. Everything the
 extension runs is a read.
@@ -140,7 +140,7 @@ rest noticing.
       search.ts        the filesystem walk for `.git`, adapted from the sibling
       vscodeSearch.ts  the editor's own index, adapted from the sibling
       kind.ts          plain / worktree / submodule / bare / shallow, decided from files
-      roots.ts         workspace folders + `repoLedger.additionalRoots`, deduplicated
+      roots.ts         workspace folders + `multirepoLedger.additionalRoots`, deduplicated
       cache.ts         what the last walk found, keyed by stamp
     model/
       types.ts         Repository, RepoState, ForgeCount, SortMode, FilterMode
@@ -171,9 +171,9 @@ rest noticing.
       gitlab.ts        `glab` invocation and result mapping
       overlay.ts       the cache, the four states, and the rule against inventing a count
     view/
-      listView.ts      the `WebviewViewProvider` for `repoLedger.repositories`
+      listView.ts      the `WebviewViewProvider` for `multirepoLedger.repositories`
       listHtml.ts      the page, the patch protocol, the content security policy
-      historyView.ts   the `WebviewViewProvider` for `repoLedger.history`
+      historyView.ts   the `WebviewViewProvider` for `multirepoLedger.history`
       historyHtml.ts   the same, for the history pane
       handoffs.ts      the five row commands, each a VS Code call `actionsFor` already decided
     util/
@@ -299,7 +299,7 @@ in either can be read across.
 Two sources, because they cover different halves of the problem. `vscode.workspace.findFiles` runs
 against the editor's own file index, outside the extension host, is cancellable, and — in its own
 words — "will return no results if no workspace folders are opened". It can therefore only ever
-answer for the open folders. `repoLedger.additionalRoots` points, by definition, outside them; it is
+answer for the open folders. `multirepoLedger.additionalRoots` points, by definition, outside them; it is
 the setting this extension exists for, since the point is to answer across repositories the user is
 *not* currently working in. A walk is not optional.
 
@@ -343,7 +343,7 @@ silently**. `null` is the only value that works.
 
 The cost is that the search traverses directories the user has hidden. That is compensated on the
 results rather than in the query: the extension applies its own directory-name exclusion list (D10)
-to every path that comes back, and `repoLedger.exclude` removes a named repository from the board
+to every path that comes back, and `multirepoLedger.exclude` removes a named repository from the board
 entirely.
 
 Rejected: merging `files.exclude` and `search.exclude`, as the sibling does. It is the right thing
@@ -455,7 +455,7 @@ a working tree with a HEAD of its own, so:
   unmarked, so the row is honest with no extra work. Folding it into the main repository's row would
   show one HEAD for two checkouts, which is the exact confusion worktrees exist to prevent.
 - **A submodule gets its own row**, marked `submodule`, behind a new setting
-  `repoLedger.includeSubmodules`, default `false`. Because D7 prunes, submodules are not found by
+  `multirepoLedger.includeSubmodules`, default `false`. Because D7 prunes, submodules are not found by
   *walking* — but they are emphatically found by the *index*, because pass B is `**/.git` with no
   excludes (D5, D6) and an initialised submodule's `.git` is precisely a file with that name. D67
   is what removes them again, and without it this setting's default would be a lie on every
@@ -480,7 +480,7 @@ submodules by default.
 
 ### D10. Three guards on the walk, and none of them is a performance setting
 
-**1. Depth: `repoLedger.maxDepth`, default 32, minimum 1, with no value meaning "unlimited".** With
+**1. Depth: `multirepoLedger.maxDepth`, default 32, minimum 1, with no value meaning "unlimited".** With
 D7 pruning at every repository, depth is not what keeps the walk cheap, so it does not have to be
 small to be useful. It is a stop against a symlink cycle the dirent check misses and against a root
 that turns out to be a home directory. `mgitstatus`, whose entire job is scanning a directory of
@@ -515,7 +515,7 @@ Alongside the guards, the sibling's built-in name exclusion list, minus `.git`, 
 means "stop here" rather than "skip this" (D3). Like the sibling's, it applies to what the walk
 **descends into** and never to a directory the user named, so a repository living under an excluded
 name is still reachable by naming its parent in `additionalRoots`. It is not a setting:
-`repoLedger.exclude` already removes a repository by path, which is the case users actually have,
+`multirepoLedger.exclude` already removes a repository by path, which is the case users actually have,
 and a second, subtly different exclusion mechanism is a second thing to get wrong.
 
 **Spawn count: 0.**
@@ -696,7 +696,7 @@ a field the row does not show is not worth a line of output to parse.
 Between the tiers the dirty position on the row is **empty, not `0`**. A count the extension has not
 established never renders as zero.
 
-**Spawn count: +1 per visible repository, only while `repoLedger.dirtyState.enabled` is true; +1 per
+**Spawn count: +1 per visible repository, only while `multirepoLedger.dirtyState.enabled` is true; +1 per
 *discovered* repository while the `dirty` sort mode is selected (D31).**
 
 ### D15. Concurrency is derived from the runtime, bounded by two guards, and overridable
@@ -704,7 +704,7 @@ established never renders as zero.
 The number of repository reads in flight is `os.availableParallelism()` — which accounts for CPU
 affinity, unlike `os.cpus().length`, and is present in the Node the extension host ships at the
 declared engine — falling back to `os.cpus().length`, clamped between a floor and a ceiling, and
-overridden entirely by `repoLedger.concurrency` when it is set above zero.
+overridden entirely by `multirepoLedger.concurrency` when it is set above zero.
 
 - **The floor** exists because the work is process startup and waiting on the filesystem, not
   computation. A machine that reports one available CPU — a container with a quota, a constrained
@@ -737,7 +737,7 @@ nothing itself. What it governs is how many of D11's and D14's processes are in 
 ### D16. Cancellation is by generation, and a superseded answer is dropped rather than rendered
 
 Every discovery-and-read pass carries a generation number and an `AbortSignal`. A refresh, a change
-to `workspace.workspaceFolders`, a change to any `repoLedger.*` setting that affects what is read or
+to `workspace.workspaceFolders`, a change to any `multirepoLedger.*` setting that affects what is read or
 which repositories are shown, and disposal of the view all abort the current generation and open the
 next. The signal goes into `runGit`, which kills the child — the sibling's runner already does this —
 and into the walk, which stops between two directories and returns what it has, because a cancelled
@@ -1119,7 +1119,7 @@ row's slot carries a dimmed placeholder, because there the ambiguity is genuinel
 Twenty repositories at three lines each is sixty lines before the history pane gets any room, and the
 two views share one container.
 
-`repoLedger.rowDensity` takes `comfortable` (default, three lines, the shape the requirement asks for)
+`multirepoLedger.rowDensity` takes `comfortable` (default, three lines, the shape the requirement asks for)
 and `compact`. Compact merges lines 1 and 3 into one: name, divergence and dirty glyphs on the left;
 HEAD state, kind marker and PR/MR count dimmed on the right. Line 2 survives untouched. Two lines per
 row, and **nothing removed.**
@@ -1341,7 +1341,7 @@ An empty result is a stated answer, never a blank pane: "No repository is unpush
 matches *api*", each with the click that clears it — and it is the same click that set it, so the way
 back is where the way in was.
 
-`repoLedger.exclude` is not a filter and must not be confused with one. An excluded repository is not
+`multirepoLedger.exclude` is not a filter and must not be confused with one. An excluded repository is not
 walked, not read, not counted in any tally and not present in `M`. Filtering is momentary and states its
 effect; exclusion is permanent and silent, which is why it lives in settings and not in this header.
 
@@ -1480,7 +1480,7 @@ offset per row; **at most one commit is expanded at a time** (D46), which keeps 
 pages are bounded and capped (D48) so the list is never unbounded in practice. The find widget is simply
 lost, and the mitigation is that the pane is not a search surface.
 
-**Consequence for the manifest, which a reviewer will check.** `repoLedger.history` is declared today
+**Consequence for the manifest, which a reviewer will check.** `multirepoLedger.history` is declared today
 without a `type`, which makes it a tree, and both `viewsWelcome` blocks are attached to it. It becomes
 `"type": "webview"`, and those two welcome blocks — which describe *no workspace* and *no repositories*,
 states of the list rather than of the history — stop rendering and move into the list's empty states
@@ -1962,7 +1962,7 @@ webview and change when the user drags the sidebar or the pane divider. Subseque
 then the user is scrolling deliberately rather than landing on a view. The overscroll factor is a property of
 scrolling behaviour, not of a machine; **nothing here is a stopwatch reading from any box.**
 
-**`repoLedger.history.pageSize` overrides it, with `0` meaning "derive from the pane".** A floor and a ceiling
+**`multirepoLedger.history.pageSize` overrides it, with `0` meaning "derive from the pane".** A floor and a ceiling
 bound the derived value, and both are guards rather than tuning: the floor stops a pane collapsed to a sliver
 from spawning a process to fetch two commits, and the ceiling stops a pane dragged to the full height of an
 unknown display from asking for a page whose size nobody chose.
@@ -1989,7 +1989,7 @@ resume point is a frontier, not a hash, and cannot be expressed on the command l
 earlier commits, which is real work git does again — but process count is the lever this design pulls, and
 re-walking inside a process that was going to be spawned anyway does not move it.
 
-**Retained commits are capped by `repoLedger.history.maxRetainedCommits`**, as a memory guard against
+**Retained commits are capped by `multirepoLedger.history.maxRetainedCommits`**, as a memory guard against
 someone holding page-down through a decade of history. On reaching the cap the pane states that it is showing
 the most recent N and stops offering more; it never simply stops responding. It is a guard, not a performance
 knob — lowering it hides history, it does not make anything faster — and its description in the manifest says
@@ -2207,7 +2207,7 @@ behind because nothing has fetched; the answer to that is to say so, not to fetc
 
 ### D55. The forge layer is an overlay that ships off, and can be deleted
 
-`repoLedger.forge.enabled` defaults to `false`, and while it is false neither `gh` nor `glab` is invoked, no
+`multirepoLedger.forge.enabled` defaults to `false`, and while it is false neither `gh` nor `glab` is invoked, no
 detection runs, and nothing leaves the machine. That is already in the manifest and this decision is what it means:
 everything else the Ledger does is a local read, and an extension that starts making network calls on its own
 behalf, on a machine and a connection its author cannot see, has made a decision that was not its to make.
@@ -2433,7 +2433,7 @@ the only variable it ever *sets* for a forge child is `GH_HOST`, which is a host
 ### D62. Forge queries never ride a watcher event, and never a timer
 
 A forge query is issued when the layer is enabled and the list is first populated, when the user presses Refresh, and
-when `repoLedger.forge.enabled` is switched on. Nowhere else.
+when `multirepoLedger.forge.enabled` is switched on. Nowhere else.
 
 Rejected: refreshing review state on the same watcher pass as everything else, so the row is always current. A local
 commit is a burst of file events and says nothing whatever about what is open in review; wiring the two together
@@ -2451,7 +2451,7 @@ was fetched, which is the honest answer and costs nothing.
 ### D63. Activation registers and returns; the budget is a count, and the count is zero
 
 `activate(context)` creates the output channel, installs the log sink, registers the three commands, sets the
-`repoLedger.state` context key from `workspaceFolders` and the in-memory value of `repoLedger.additionalRoots`,
+`multirepoLedger.state` context key from `workspaceFolders` and the in-memory value of `multirepoLedger.additionalRoots`,
 registers the two view providers, constructs the controller, schedules `controller.start()` with
 `setTimeout(..., 0)`, and returns. It is declared `: void`, not `async`, so there is nothing for the extension host
 to await even if somebody later adds a promise to it. No module in the import graph of `extension.ts` performs I/O at
@@ -2465,7 +2465,7 @@ count is checkable by reading twenty lines and does not need a stopwatch to stay
 
 After `activate` returns, `controller.start()` runs in this order, and the order is the decision:
 
-1. Resolve roots from the workspace folders and `repoLedger.additionalRoots`, deduplicated, with a non-existent path
+1. Resolve roots from the workspace folders and `multirepoLedger.additionalRoots`, deduplicated, with a non-existent path
    logged once and skipped.
 2. Probe once for the session that `git` exists, with `git --version`, as the sibling does. **The
    `--include-root-refs` capability is not probed here** — `for-each-ref` cannot run outside a repository, so there is
@@ -2477,7 +2477,7 @@ After `activate` returns, `controller.start()` runs in this order, and the order
 5. Schedule the tier-one row reads at the derived concurrency (D15), patching each row as it lands.
 6. Fill dirty state for visible rows only, second-tier and opt-in (D14).
 7. Install watchers — after the first pass, so the first pass is not competing with its own events.
-8. Only if `repoLedger.forge.enabled`, plan and issue the batched forge queries (D56).
+8. Only if `multirepoLedger.forge.enabled`, plan and issue the batched forge queries (D56).
 
 `onStartupFinished` is the activation event and is already in the manifest. Rejected: `onView:` on the container,
 which would mean the first glance at the board is always a loading state — and the first glance is the entire
@@ -2543,8 +2543,8 @@ named.**
 
 There are exactly three ways anything leaves this machine, and two of them require a setting that ships off:
 
-1. `gh search prs …` — only when `repoLedger.forge.enabled` is `true`.
-2. `glab mr list …` — only when `repoLedger.forge.enabled` is `true`.
+1. `gh search prs …` — only when `multirepoLedger.forge.enabled` is `true`.
+2. `glab mr list …` — only when `multirepoLedger.forge.enabled` is `true`.
 3. `vscode.env.openExternal(<remote web URL>)` — a user gesture on a row, where the request is made by the user's
    browser and not by this extension.
 
@@ -2608,7 +2608,7 @@ status board cannot afford is a row whose meaning depends on context the reader 
 
 **The rule.** A discovery candidate whose path lies inside the working tree of a repository the same
 generation has already established is **dropped**, unless the user named that candidate, or an
-ancestor of it inside that working tree, in `repoLedger.additionalRoots`. It applies to the merged
+ancestor of it inside that working tree, in `multirepoLedger.additionalRoots`. It applies to the merged
 candidate set — the walk's results and the index's alike — so a candidate is judged the same way
 whichever source found it.
 
@@ -2620,10 +2620,10 @@ and the search would otherwise return nothing at all. D6's pass B is `**/.git`, 
 named `.git` at any depth — and a file named `.git` at depth is precisely the shape of an
 initialised submodule's working directory and of a vendored clone. D4 then merges index results in
 by resolved path, and the only filters the discovery layer applies to them are the directory-name
-list (D10) and `repoLedger.exclude`; neither excludes `<repo>/sub` or `<repo>/vendor/other-project`.
+list (D10) and `multirepoLedger.exclude`; neither excludes `<repo>/sub` or `<repo>/vendor/other-project`.
 
 Without this rule, therefore, any workspace folder holding an initialised submodule renders a
-`submodule` row while `repoLedger.includeSubmodules` sits at its default `false` — a setting
+`submodule` row while `multirepoLedger.includeSubmodules` sits at its default `false` — a setting
 contradicted by its own default — and `<repo>/vendor/other-project` gets a row that D9 says it gets
 only when the user names it. Worse, because D4 has the index paint first and the walk arrive later,
 the row would **appear and then vanish**, which is a worse outcome than either half.
@@ -2650,7 +2650,7 @@ silently.
 
 Rejected: letting the index legitimately surface these, on the grounds that D4 calls the walk the
 authority for *coverage* and more coverage is better. Coverage is not the same claim as membership.
-Taking it would make `repoLedger.includeSubmodules: false` false on every workspace holding an
+Taking it would make `multirepoLedger.includeSubmodules: false` false on every workspace holding an
 initialised submodule, and would make D9's "only when the user named it" true or false depending on
 whether the editor's index happened to reach the directory — which is to say, on whether the
 repository was under an open folder rather than under an additional root. A board whose contents
@@ -2676,7 +2676,7 @@ Every operation that touches git, in one table, so a reviewer does not have to a
 |---|---|---|
 | Discovery: the walk, the index passes, repository kind, shallowness | **0** | walk reads directories at the sibling's fixed bound, a file-handle guard |
 | `git` present on `PATH` | **1 per session**, cached | serial, after `activate` returns |
-| Row read, HEAD attached (case A) | **1** per repository per refresh | `os.availableParallelism()`, floored, ceilinged, overridden by `repoLedger.concurrency` (D15) |
+| Row read, HEAD attached (case A) | **1** per repository per refresh | `os.availableParallelism()`, floored, ceilinged, overridden by `multirepoLedger.concurrency` (D15) |
 | Row read, HEAD detached (case B) | **1** | as above |
 | Row read, `HEAD` unreadable (case C) | **1** | as above |
 | Row read on old git, detached, after the D12 probe fails | **1** | as above |
@@ -2697,8 +2697,8 @@ Every operation that touches git, in one table, so a reviewer does not have to a
 | Watcher-triggered pass | **1 per repository the events named**, 0 for the rest | the row-read pool |
 
 Two rules the table encodes. **Every tuning number in it is derived or is a setting**:
-`os.availableParallelism()` with a named floor and ceiling, `repoLedger.concurrency`,
-`repoLedger.history.pageSize` derived from the pane's own geometry. The 10 s timeout, the 32 MiB cap, the depth cap,
+`os.availableParallelism()` with a named floor and ceiling, `multirepoLedger.concurrency`,
+`multirepoLedger.history.pageSize` derived from the pane's own geometry. The 10 s timeout, the 32 MiB cap, the depth cap,
 the directory budget and the retained-commit cap are **guards** — each named for the failure it prevents, none for a
 speed it achieves.
 

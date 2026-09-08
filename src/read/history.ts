@@ -39,7 +39,10 @@ import { runGit } from '../util/git.ts';
 const FIELD = '\u001f';
 const RECORD = '\u001e';
 
-const HISTORY_FORMAT = ['%H', '%P', '%D', '%ct', '%an', '%s'].join('%x1f') + '%x1e';
+// `%ae` sits between the name and the subject rather than at the end, because
+// the subject has to stay last: everything past the final separator is rejoined
+// into it, which is what absorbs a separator somebody committed into a message.
+export const HISTORY_FORMAT = ['%H', '%P', '%D', '%ct', '%an', '%ae', '%s'].join('%x1f') + '%x1e';
 
 /** Commits per page. A setting rather than a constant; this is the fallback. */
 export const DEFAULT_PAGE_SIZE = 50;
@@ -143,7 +146,7 @@ export function parseHistory(stdout: string): Commit[] {
       continue;
     }
     const fields = trimmed.split(FIELD);
-    if (fields.length < 6) {
+    if (fields.length < 7) {
       continue;
     }
     const sha = (fields[0] ?? '').trim();
@@ -158,9 +161,10 @@ export function parseHistory(stdout: string): Commit[] {
       refs: parseRefs(fields[2] ?? ''),
       committedAt,
       author: fields[4] ?? '',
-      // Everything past the fifth separator is the subject, so a separator that
+      authorEmail: fields[5] ?? '',
+      // Everything past the sixth separator is the subject, so a separator that
       // somebody committed into it rejoins rather than truncating the message.
-      subject: fields.slice(5).join(FIELD),
+      subject: fields.slice(6).join(FIELD),
       unpushed: false,
     });
   }

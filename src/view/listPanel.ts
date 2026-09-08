@@ -24,6 +24,8 @@ import type {
   Tally,
 } from '../model/types.ts';
 import { FILTER_MODES, ROW_ACTIONS, SORT_MODES } from '../model/types.ts';
+import { authorOptions } from './activity.ts';
+import type { Badge } from './badge.ts';
 import { buildRows } from './row.ts';
 
 /** What the page asked for, once it has been checked against the known sets. */
@@ -38,14 +40,20 @@ export type PanelRequest =
   /** The period every commit question is asked over. */
   | { readonly type: 'period'; readonly period: string }
   /** Narrow the commits, in the pane and the report alike. */
-  | { readonly type: 'commitFilter'; readonly mergesOnly?: boolean; readonly author?: string };
+  | {
+      readonly type: 'commitFilter';
+      readonly mergesOnly?: boolean;
+      /** An identity key from `authorsOf`, not a display name. */
+      readonly authorId?: string;
+    };
 
 export class ListViewProvider implements vscode.WebviewViewProvider {
-  static readonly viewType = 'repoLedger.repositories';
+  static readonly viewType = 'multirepoLedger.repositories';
 
   private readonly requested = new vscode.EventEmitter<PanelRequest>();
   private readonly listeners: vscode.Disposable[] = [];
   private view: vscode.WebviewView | undefined;
+  private badge: Badge | undefined;
   private disposed = false;
 
   /** Until the controller says otherwise, an empty list means "not yet". */
@@ -56,6 +64,7 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
     sort: 'recent',
     filter: 'all',
     busy: true,
+    fetchEnabled: false,
     generation: 0,
     period: 'week',
     mergesOnly: false,
@@ -71,6 +80,10 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    // Whatever the badge was before the container was first opened. It is set
+    // long before this runs, and the reader who never opens the panel is the
+    // one the badge exists for.
+    view.badge = this.badge;
     view.webview.options = {
       enableScripts: true,
       // The page carries its own styles and icons, so nothing may be loaded
@@ -93,6 +106,21 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
   setModel(model: ListModel): void {
     this.model = model;
     this.render();
+  }
+
+  /**
+   * The number on the Activity Bar icon, or `undefined` for none.
+   *
+   * Held rather than set straight through, because the view does not exist
+   * until the container is first opened and a badge set before that would be
+   * dropped - which is exactly the case the badge is for, a reader who has not
+   * opened the panel yet.
+   */
+  setBadge(badge: Badge | undefined): void {
+    this.badge = badge;
+    if (this.view) {
+      this.view.badge = badge;
+    }
   }
 
   dispose(): void {
@@ -156,7 +184,9 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
           ...(typeof payload['mergesOnly'] === 'boolean'
             ? { mergesOnly: payload['mergesOnly'] }
             : {}),
-          ...(typeof payload['author'] === 'string' ? { author: payload['author'] } : {}),
+          ...(typeof payload['authorId'] === 'string'
+            ? { authorId: payload['authorId'] }
+            : {}),
         });
         return;
       case 'action':
@@ -374,21 +404,21 @@ function renderLens(model: ListModel): string {
   // asks "who did anything" - the control vanished, and a filter that is absent
   // when the list is short is a filter nobody knows exists.
   //
-  // A name the current range does not contain is kept in the list while it is
-  // chosen, so narrowing the range does not silently drop the filter and widen
-  // the result behind the reader's back.
-  const names = [...model.authors];
-  if (model.author !== undefined && !names.includes(model.author)) {
-    names.push(model.author);
-  }
+  // One option per person, keyed on the address. Keyed on the display name it
+  // offered the same person once per machine they commit from, and picking one
+  // spelling hid the work done under the others. The controller keeps a chosen
+  // person in this list even when the range no longer holds a commit of theirs,
+  // so narrowing does not drop the filter behind the reader's back.
   const authors =
     `<label class="author-label">Author<select class="author">` +
-    `<option value=""${model.author === undefined ? ' selected' : ''}>Everyone</option>` +
-    names
+    `<option value=""${model.authorId === undefined ? ' selected' : ''}>Everyone</option>` +
+    authorOptions(model.authors)
       .map(
         (author) =>
-          `<option value="${escapeHtml(author)}"${model.author === author ? ' selected' : ''}>` +
-          `${escapeHtml(author)}</option>`,
+          `<option value="${escapeHtml(author.id)}"` +
+          `${model.authorId === author.id ? ' selected' : ''}` +
+          `${author.title.length > 0 ? ` title="${escapeHtml(author.title)}"` : ''}>` +
+          `${escapeHtml(author.text)}</option>`,
       )
       .join('') +
     `</select></label>`;
@@ -516,6 +546,16 @@ const ROW_ACTION_ICONS: ReadonlyArray<{ action: string; title: string; svg: stri
       '<path d="M1.9 6.1h12.2" fill="none" stroke="currentColor" stroke-width="1.3"/>',
   },
   {
+    // The one action here that writes. Drawn only when the setting allows it,
+    // which is why this table is filtered rather than rendered whole.
+    action: 'fetch',
+    title: 'Fetch from the remote',
+    svg:
+      '<path d="M8 2.4v6.9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>' +
+      '<path d="M5.2 6.6 8 9.4l2.8-2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M2.7 12.6h10.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  },
+  {
     action: 'copy-path',
     title: 'Copy the path',
     svg:
@@ -524,7 +564,7 @@ const ROW_ACTION_ICONS: ReadonlyArray<{ action: string; title: string; svg: stri
   },
 ];
 
-function renderRow(row: RenderedRow, selected: boolean): string {
+function renderRow(row: RenderedRow, selected: boolean, fetchEnabled: boolean): string {
   const where = `data-path="${escapeHtml(row.path)}"`;
 
   // Line 1. The name wins the width contest; the evidence age is the dimmed
@@ -568,7 +608,9 @@ function renderRow(row: RenderedRow, selected: boolean): string {
       ? `<span class="why">${escapeHtml(row.unreadableReason)}</span>`
       : '';
 
-  const actions = ROW_ACTION_ICONS.map(
+  const actions = ROW_ACTION_ICONS.filter(
+    (entry) => entry.action !== 'fetch' || fetchEnabled,
+  ).map(
     (entry) =>
       `<button type="button" class="row-action" data-action="${entry.action}" ${where}` +
       ` title="${escapeHtml(entry.title)}" aria-label="${escapeHtml(`${entry.title}: ${row.name}`)}">` +
@@ -600,7 +642,7 @@ function renderEmpty(model: ListModel): string {
 <p class="hint">Rows appear as each repository answers, rather than after all of them do.</p></div>`;
     case 'nothing-to-scan':
       return `<div class="empty"><p>No folder is open and no directory is configured, so there is nothing to scan.</p>
-<p class="hint">The directory your repositories live in is usually not the one you have open — name it in <code>repoLedger.additionalRoots</code>.</p>
+<p class="hint">The directory your repositories live in is usually not the one you have open — name it in <code>multirepoLedger.additionalRoots</code>.</p>
 <p><button type="button" class="link" data-action-global="settings">Configure directories</button></p></div>`;
     case 'no-git':
       return `<div class="empty"><p><code>git</code> was not found on <code>PATH</code>.</p>
@@ -629,7 +671,7 @@ export function renderHtml(model: ListModel, nonce: string): string {
   const body = empty
     ? `${header}${renderEmpty(model)}`
     : `${header}<div class="rows">${rendered
-        .map((row) => renderRow(row, row.path === model.selectedPath))
+        .map((row) => renderRow(row, row.path === model.selectedPath, model.fetchEnabled))
         .join('')}</div>`;
 
   return `<!DOCTYPE html>
@@ -953,7 +995,7 @@ document.addEventListener('change', (event) => {
   if (target.classList.contains('sort')) {
     api.postMessage({ type: 'sort', sort: target.value });
   } else if (target.classList.contains('author')) {
-    api.postMessage({ type: 'commitFilter', author: target.value });
+    api.postMessage({ type: 'commitFilter', authorId: target.value });
   }
 });
 

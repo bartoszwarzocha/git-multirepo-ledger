@@ -20,7 +20,7 @@ or it is silence), D63 (the list is populated by discovery, not by the read).
 
 ### Requirement: The list is a webview populated by discovery before any git process answers
 
-The system SHALL render the repository list in the `repoLedger.repositories` webview view, and
+The system SHALL render the repository list in the `multirepoLedger.repositories` webview view, and
 SHALL render a row for every repository discovery has named before any git process has answered.
 
 The page SHALL be assigned once per generation — a fresh discovery, a sort change, a filter change
@@ -223,7 +223,7 @@ While the second-tier read is enabled and a particular row's answer has not arri
 dirty position SHALL carry a dimmed placeholder rather than an empty slot or a zero.
 
 #### Scenario: The second-tier read is off
-- **WHEN** `repoLedger.dirtyState.enabled` is `false`
+- **WHEN** `multirepoLedger.dirtyState.enabled` is `false`
 - **THEN** every row's dirty position SHALL be empty
 - **AND** the header SHALL carry the dimmed sentence `Uncommitted changes are not being read.`
 
@@ -242,7 +242,7 @@ dirty position SHALL carry a dimmed placeholder rather than an empty slot or a z
 
 ### Requirement: Compact density folds the row and removes nothing
 
-The system SHALL offer `repoLedger.rowDensity` with the values `comfortable` (default, three lines)
+The system SHALL offer `multirepoLedger.rowDensity` with the values `comfortable` (default, three lines)
 and `compact`. In `compact` the system SHALL merge lines 1 and 3 into one line — name, divergence
 and dirty glyphs leading, HEAD state, kind marker and review count dimmed and trailing — and SHALL
 leave line 2 unchanged.
@@ -253,7 +253,7 @@ repository count.
 The view SHALL offer a toggle that writes the setting, so the choice survives a window reload.
 
 #### Scenario: Compact
-- **WHEN** `repoLedger.rowDensity` is `compact`
+- **WHEN** `multirepoLedger.rowDensity` is `compact`
 - **THEN** each row SHALL occupy two lines
 - **AND** the HEAD state and kind marker SHALL be rendered, dimmed, on the merged line
 - **AND** line 2 SHALL still carry the relative date and the subject
@@ -450,7 +450,7 @@ The sort mode SHALL persist for the window and SHALL NOT be written to the user'
 - **AND** it SHALL remain reachable in one click from the `unreadable` chip
 
 #### Scenario: Selecting the dirty mode with the read disabled
-- **WHEN** the reader selects the `dirty` mode while `repoLedger.dirtyState.enabled` is `false`
+- **WHEN** the reader selects the `dirty` mode while `multirepoLedger.dirtyState.enabled` is `false`
 - **THEN** the second-tier read SHALL be enabled
 - **AND** the view SHALL state that it has been enabled
 
@@ -522,7 +522,7 @@ While either filter is active the header SHALL render `showing N of M`.
 An empty result SHALL render a sentence naming the filter that produced it, together with the
 control that clears it, and SHALL NOT render a blank list.
 
-`repoLedger.exclude` SHALL NOT be presented as a filter: an excluded repository SHALL NOT be walked,
+`multirepoLedger.exclude` SHALL NOT be presented as a filter: an excluded repository SHALL NOT be walked,
 read, counted in any tally, or included in `M`.
 
 #### Scenario: Text matching line 3
@@ -545,7 +545,7 @@ read, counted in any tally, or included in `M`.
 - **AND** SHALL offer the same control that set the filter as the way to clear it
 
 #### Scenario: An excluded repository
-- **WHEN** a repository's absolute path is listed in `repoLedger.exclude`
+- **WHEN** a repository's absolute path is listed in `multirepoLedger.exclude`
 - **THEN** it SHALL NOT appear in the list under any filter
 - **AND** it SHALL NOT be included in `M`
 - **AND** it SHALL NOT be counted by any header chip
@@ -627,7 +627,7 @@ rather than by navigating the page.
 - **AND** SHALL offer a control that refreshes
 
 #### Scenario: No folder and no configured root
-- **WHEN** no workspace folder is open and `repoLedger.additionalRoots` is empty
+- **WHEN** no workspace folder is open and `multirepoLedger.additionalRoots` is empty
 - **THEN** the list SHALL state that there is nothing to scan
 - **AND** SHALL offer a control to open a folder and a control to configure additional roots
 
@@ -646,7 +646,7 @@ NOT remove a repository from the list because it could not be read.
 | No remote, or no upstream | line 1 renders the dimmed words `no upstream` and no divergence figure |
 | Bare | line 3 carries the marker `bare`; the row offers no action that assumes a working tree |
 | Shallow | line 3 carries the marker `shallow` |
-| Nested inside another repository | a linked worktree is its own row marked `worktree`; a submodule is its own row marked `submodule`, and only while `repoLedger.includeSubmodules` is enabled |
+| Nested inside another repository | a linked worktree is its own row marked `worktree`; a submodule is its own row marked `submodule`, and only while `multirepoLedger.includeSubmodules` is enabled |
 | Git refused it for dubious ownership | line 2 reads `not readable — git refused: dubious ownership` with the path, and the row offers to copy git's own remedy |
 | It did not answer within the per-process timeout | line 2 reads `did not answer in 10 s` and the row offers Retry |
 
@@ -750,7 +750,7 @@ flight; the established count while a query has answered for it; and a dimmed re
 The system SHALL use the word the forge uses — `PR` for a GitHub remote and `MR` for a GitLab one.
 
 #### Scenario: The forge layer is off
-- **WHEN** `repoLedger.forge.enabled` is `false`
+- **WHEN** `multirepoLedger.forge.enabled` is `false`
 - **THEN** no row SHALL render anything in the review-count position
 - **AND** no placeholder, dash or empty bracket SHALL be rendered there
 

@@ -1,4 +1,4 @@
-# Repo Ledger
+# Multirepo Ledger
 
 A VS Code extension that answers "what is the state of all my repositories" for a *directory
 full of them*, without opening any of them.
@@ -72,8 +72,17 @@ once the code is fun to write.
 
 ## What it deliberately is not
 
-Not a git client. No staging, no committing, no pushing, no conflict resolution, no blame. It
-is a status board that hands off to the tools already installed. Everything it runs is a read.
+Not a git client. No staging, no committing, no pushing, no merging, no rebasing, no conflict
+resolution, no blame. It is a status board that hands off to the tools already installed.
+
+Everything it runs is a read, with exactly one exception, and the exception is chosen for what it
+cannot do: `git fetch` writes remote-tracking refs, `FETCH_HEAD` and objects, and can touch neither
+the working tree nor a branch nor a commit, so nothing it does can conflict or lose work. It is
+here because the row's divergence figures are measured against remote-tracking refs and are
+therefore a report on the last fetch rather than on the repository. It ships disabled, like
+everything else that reaches the network, and a bulk `pull`, `push` or `--prune` is refused
+outright: run across twenty repositories, a conflict in three of them leaves three half-merged
+trees nobody asked for and nothing on screen saying so.
 
 ## It is published, so it is designed for the unknown
 

@@ -3,6 +3,9 @@ import { test } from 'node:test';
 
 import type { ActivityEntry } from '../read/activity.ts';
 import {
+  authorIdOf,
+  authorOptions,
+  authorOf,
   authorsOf,
   failureSentence,
   filterActivity,
@@ -15,7 +18,9 @@ import {
 const NOW = new Date(2026, 8, 8, 12, 0, 0).getTime();
 const SECONDS = Math.floor(NOW / 1000);
 
-function entry(over: Partial<{ repo: string; at: number; author: string; parents: number }> = {}): ActivityEntry {
+function entry(
+  over: Partial<{ repo: string; at: number; author: string; email: string; parents: number }> = {},
+): ActivityEntry {
   const parents = over.parents ?? 1;
   return {
     repositoryPath: over.repo ?? 'E:/AI/one',
@@ -27,6 +32,9 @@ function entry(over: Partial<{ repo: string; at: number; author: string; parents
       refs: [],
       committedAt: over.at ?? SECONDS - 3600,
       author: over.author ?? 'Ada',
+      // Distinct by default, so a test that means to talk about two people gets
+      // two people without having to say so every time.
+      authorEmail: over.email ?? `${(over.author ?? 'Ada').toLowerCase().replace(/ /g, '.')}@example.com`,
       subject: 'Something landed',
       unpushed: false,
     },
@@ -58,18 +66,92 @@ test('merges only keeps the commits with more than one parent', () => {
   assert.equal(filterActivity(entries, { mergesOnly: false }).length, 3);
 });
 
-test('an author filter is exact, because two people can share a first name', () => {
-  const entries = [entry({ author: 'Ada' }), entry({ author: 'Ada Lovelace' })];
-  assert.equal(filterActivity(entries, { mergesOnly: false, author: 'Ada' }).length, 1);
+test('two spellings of one address are one person, and the filter keeps both', () => {
+  // The defect this exists for: `user.name` is per checkout, so the same person
+  // arrives under whatever each machine was set up with. Keyed on the name, the
+  // picker offered them twice and each option hid the other's commits.
+  const entries = [
+    entry({ author: 'Bartosz Warzocha', email: 'b@example.com' }),
+    entry({ author: 'bartosz.warzocha', email: 'b@example.com' }),
+    entry({ author: 'Bartosz Warzocha', email: 'b@example.com' }),
+  ];
+  const people = authorsOf(entries);
+  assert.equal(people.length, 1);
+  assert.equal(people[0]?.label, 'Bartosz Warzocha');
+  assert.deepEqual(people[0]?.names, ['Bartosz Warzocha', 'bartosz.warzocha']);
+  assert.equal(
+    filterActivity(entries, { mergesOnly: false, authorId: people[0]?.id ?? '' }).length,
+    3,
+  );
 });
 
-test('authors are offered by how much of the list they wrote', () => {
+test('one address is one person however it is capitalised', () => {
+  const entries = [
+    entry({ author: 'Ada', email: 'Ada@Example.com' }),
+    entry({ author: 'Ada', email: 'ada@example.com' }),
+  ];
+  assert.equal(authorsOf(entries).length, 1);
+});
+
+test('two addresses stay two people even when the name is identical', () => {
+  // The other half of the same rule: a resemblance is not evidence. Folding
+  // these together would report one person's work as two people's, or worse,
+  // two people's as one, with nothing on screen saying it had happened.
+  const entries = [
+    entry({ author: 'Ada', email: 'ada@one.example' }),
+    entry({ author: 'Ada', email: 'ada@two.example' }),
+  ];
+  assert.equal(authorsOf(entries).length, 2);
+});
+
+test('a commit with no address falls back to the name, in its own namespace', () => {
+  assert.equal(authorIdOf({ author: 'Ada', authorEmail: '' }), 'name:ada');
+  // And a name can never collide with somebody's real address.
+  assert.notEqual(
+    authorIdOf({ author: 'ada@example.com', authorEmail: '' }),
+    authorIdOf({ author: 'Ada', authorEmail: 'ada@example.com' }),
+  );
+});
+
+test('people are offered by how much of the list they wrote', () => {
   const entries = [
     entry({ author: 'Ada' }),
     entry({ author: 'Grace' }),
     entry({ author: 'Grace' }),
   ];
-  assert.deepEqual(authorsOf(entries), ['Grace', 'Ada']);
+  assert.deepEqual(
+    authorsOf(entries).map((author) => author.label),
+    ['Grace', 'Ada'],
+  );
+  assert.deepEqual(
+    authorsOf(entries).map((author) => author.commits),
+    [2, 1],
+  );
+});
+
+test('the label is the name used most, and the commit keeps its own spelling', () => {
+  const entries = [
+    entry({ author: 'Grace Hopper', email: 'g@example.com' }),
+    entry({ author: 'Grace Hopper', email: 'g@example.com' }),
+    entry({ author: 'ghopper', email: 'g@example.com' }),
+  ];
+  const labels = new Map(authorsOf(entries).map((author) => [author.id, author.label]));
+  assert.deepEqual(authorOf(entries[0] as ActivityEntry, labels), { author: 'Grace Hopper' });
+  assert.deepEqual(authorOf(entries[2] as ActivityEntry, labels), {
+    author: 'Grace Hopper',
+    recordedAs: 'ghopper',
+  });
+});
+
+test('the summary counts people, not spellings', () => {
+  const entries = [
+    entry({ author: 'Ada', email: 'a@example.com' }),
+    entry({ author: 'ada.l', email: 'a@example.com' }),
+  ];
+  assert.equal(summarise(entries, 'week').authors, 1);
+  // One author is not named in the sentence at all - it is only worth saying
+  // when there is more than one.
+  assert.ok(!summarise(entries, 'week').sentence.includes('author'));
 });
 
 // ---------------------------------------------------------------------------
@@ -159,4 +241,24 @@ test('more than three are summarised rather than listed to the end', () => {
 
 test('nothing unreadable is silence, not an empty sentence', () => {
   assert.equal(failureSentence([]), undefined);
+});
+
+test('two people with one name are told apart in the option, not only in a tooltip', () => {
+  const entries = [
+    entry({ author: 'Ada Lovelace', email: 'ada@one.example' }),
+    entry({ author: 'Ada Lovelace', email: 'ada@two.example' }),
+    entry({ author: 'Grace', email: 'g@example.com' }),
+  ];
+  const options = authorOptions(authorsOf(entries));
+  assert.deepEqual(
+    options.map((option) => option.text).sort(),
+    ['Ada Lovelace <ada@one.example>', 'Ada Lovelace <ada@two.example>', 'Grace'],
+  );
+});
+
+test('a chosen person with nothing in the range says so rather than looking broken', () => {
+  const [option] = authorOptions([
+    { id: 'a@example.com', label: 'Ada', email: 'a@example.com', names: ['Ada'], commits: 0 },
+  ]);
+  assert.ok(option?.title.includes('nothing in this range'));
 });

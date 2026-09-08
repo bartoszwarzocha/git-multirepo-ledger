@@ -9,7 +9,7 @@
  *
  * The editor's own index answers faster for the open folders and
  * `vscodeSearch.ts` asks it (design.md D4), but the index cannot see
- * `repoLedger.additionalRoots`, cannot see a bare repository, and returns
+ * `multirepoLedger.additionalRoots`, cannot see a bare repository, and returns
  * nothing at all in a window with no folder open - which for this extension is
  * an ordinary window and not an edge case. So the walk is the authority, and it
  * is also what the unit tests can run, because it needs no extension host.
@@ -72,8 +72,8 @@ export interface RepositoryCandidate {
  *
  * The list applies only to what the walk descends *into*, never to a directory
  * the user named as a root, so a repository living under one of these names is
- * still reachable by naming it, or its parent, in `repoLedger.additionalRoots`.
- * It is deliberately not a setting (design.md D10): `repoLedger.exclude` already
+ * still reachable by naming it, or its parent, in `multirepoLedger.additionalRoots`.
+ * It is deliberately not a setting (design.md D10): `multirepoLedger.exclude` already
  * removes a repository by path, which is the case users actually have, and a
  * second and subtly different exclusion mechanism is a second thing to get
  * wrong.
@@ -92,7 +92,7 @@ export const DEFAULT_EXCLUDED_DIRS: readonly string[] = [
 ];
 
 export interface FsSearchOptions {
-  /** Levels below each starting directory. Default 32, from `repoLedger.maxDepth`. */
+  /** Levels below each starting directory. Default 32, from `multirepoLedger.maxDepth`. */
   maxDepth?: number;
   /** Replaces `DEFAULT_EXCLUDED_DIRS` rather than adding to it. */
   excludedDirs?: readonly string[];
@@ -104,7 +104,7 @@ export interface FsSearchOptions {
 /**
  * Levels below a starting directory.
  *
- * The caller passes this from `repoLedger.maxDepth`; the default here is the
+ * The caller passes this from `multirepoLedger.maxDepth`; the default here is the
  * same number and exists so a test, or a caller that has no settings to read,
  * is still bounded. It is a stop against a symlink cycle the dirent check
  * misses and against a root that turns out to be a home directory - **not** a

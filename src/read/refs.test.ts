@@ -607,7 +607,7 @@ function labEnv(cwd: string): NodeJS.ProcessEnv {
 async function makeLab(): Promise<Lab> {
   // `realpath`: the temp directory is a symlink on macOS, and git reports the
   // resolved path, so an unresolved one would not compare equal to git's answer.
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'repo-ledger-refs-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'multirepo-ledger-refs-')));
   const origin = path.join(root, 'origin.git');
   const repo = path.join(root, 'repo');
 

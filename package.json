@@ -1,18 +1,18 @@
 {
-  "name": "repo-ledger",
-  "displayName": "Repo Ledger",
-  "description": "A status board for a whole directory of git repositories: what moved last, on which branch, how far from upstream, and what is waiting in review.",
+  "name": "multirepo-ledger",
+  "displayName": "Git Multirepo Ledger",
+  "description": "A status board for a whole directory of git repositories - multi-repo, multirepo, many repositories at once: what moved last, on which branch, how far from upstream, and what is waiting in review.",
   "version": "0.0.1",
   "publisher": "bartosz-warzocha",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bartoszwarzocha/repo-ledger.git"
+    "url": "https://github.com/bartoszwarzocha/multirepo-ledger.git"
   },
   "bugs": {
-    "url": "https://github.com/bartoszwarzocha/repo-ledger/issues"
+    "url": "https://github.com/bartoszwarzocha/multirepo-ledger/issues"
   },
-  "homepage": "https://github.com/bartoszwarzocha/repo-ledger#readme",
+  "homepage": "https://github.com/bartoszwarzocha/multirepo-ledger#readme",
   "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.104.0"
@@ -24,8 +24,10 @@
   ],
   "keywords": [
     "git",
-    "repositories",
+    "multirepo",
     "multi-repo",
+    "multiple repositories",
+    "repositories",
     "monorepo",
     "status",
     "branches",
@@ -41,37 +43,37 @@
   "capabilities": {
     "virtualWorkspaces": {
       "supported": false,
-      "description": "Repo Ledger reads repositories by running the git command line, which a virtual filesystem cannot provide."
+      "description": "Multirepo Ledger reads repositories by running the git command line, which a virtual filesystem cannot provide."
     },
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Repo Ledger runs git in the directories it discovers, so it asks for trust before reading anything."
+      "description": "Multirepo Ledger runs git in the directories it discovers, so it asks for trust before reading anything."
     }
   },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "repo-ledger",
-          "title": "Repo Ledger",
+          "id": "multirepo-ledger",
+          "title": "Multirepo Ledger",
           "icon": "resources/activity-bar.svg"
         }
       ]
     },
     "views": {
-      "repo-ledger": [
+      "multirepo-ledger": [
         {
-          "id": "repoLedger.repositories",
+          "id": "multirepoLedger.repositories",
           "name": "Repositories",
           "type": "webview",
-          "contextualTitle": "Repo Ledger",
+          "contextualTitle": "Multirepo Ledger",
           "visibility": "visible",
           "initialSize": 1
         },
         {
-          "id": "repoLedger.history",
+          "id": "multirepoLedger.history",
           "name": "History",
-          "contextualTitle": "Repo Ledger",
+          "contextualTitle": "Multirepo Ledger",
           "initialSize": 1,
           "type": "webview"
         }
@@ -79,51 +81,62 @@
     },
     "commands": [
       {
-        "command": "repoLedger.activityReport",
+        "command": "multirepoLedger.activityReport",
         "title": "Activity Report",
-        "category": "Repo Ledger",
+        "category": "Multirepo Ledger",
         "icon": "$(graph)"
       },
       {
-        "command": "repoLedger.refresh",
+        "command": "multirepoLedger.refresh",
         "title": "Refresh",
-        "category": "Repo Ledger",
+        "category": "Multirepo Ledger",
         "icon": "$(refresh)"
       },
       {
-        "command": "repoLedger.showOutput",
-        "title": "Show Log",
-        "category": "Repo Ledger"
+        "command": "multirepoLedger.fetchAll",
+        "title": "Fetch All",
+        "category": "Multirepo Ledger",
+        "icon": "$(cloud-download)"
       },
       {
-        "command": "repoLedger.openAdditionalRootsSetting",
+        "command": "multirepoLedger.showOutput",
+        "title": "Show Log",
+        "category": "Multirepo Ledger"
+      },
+      {
+        "command": "multirepoLedger.openAdditionalRootsSetting",
         "title": "Configure Additional Roots",
-        "category": "Repo Ledger"
+        "category": "Multirepo Ledger"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "repoLedger.activityReport",
-          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "command": "multirepoLedger.activityReport",
+          "when": "view =~ /^multirepoLedger\\.(repositories|history)$/",
           "group": "navigation@0"
         },
         {
-          "command": "repoLedger.refresh",
-          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "command": "multirepoLedger.refresh",
+          "when": "view =~ /^multirepoLedger\\.(repositories|history)$/",
           "group": "navigation@1"
         },
         {
-          "command": "repoLedger.showOutput",
-          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "command": "multirepoLedger.fetchAll",
+          "when": "view == multirepoLedger.repositories && config.multirepoLedger.fetch.enabled",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multirepoLedger.showOutput",
+          "when": "view =~ /^multirepoLedger\\.(repositories|history)$/",
           "group": "1_ledger@0"
         }
       ]
     },
     "configuration": {
-      "title": "Repo Ledger",
+      "title": "Multirepo Ledger",
       "properties": {
-        "repoLedger.additionalRoots": {
+        "multirepoLedger.additionalRoots": {
           "type": "array",
           "items": {
             "type": "string"
@@ -132,7 +145,7 @@
           "scope": "machine-overridable",
           "markdownDescription": "Absolute directory paths scanned for git repositories in addition to the open workspace folders. Use this for the directory your repositories actually live in when you have not opened it in the editor - that is the normal case for this extension, since the point of it is to answer across repositories you are *not* currently working in. A path that does not exist is reported once in the log and skipped."
         },
-        "repoLedger.exclude": {
+        "multirepoLedger.exclude": {
           "type": "array",
           "items": {
             "type": "string"
@@ -141,35 +154,68 @@
           "scope": "machine-overridable",
           "markdownDescription": "Absolute paths of repositories to leave out of the Ledger entirely. An excluded repository is not read, not counted and not shown, so a mirror, a vendored checkout or something you keep on disk but never work in stops taking up a row beside the repositories you do watch."
         },
-        "repoLedger.maxDepth": {
+        "multirepoLedger.maxDepth": {
           "type": "number",
           "default": 32,
           "minimum": 1,
           "markdownDescription": "How many directory levels below each scanned root the search descends looking for a `.git`. This is a stop against a symlink cycle or a root that turns out to be a home directory, **not** a way to make the scan cheaper: lowering it hides repositories that sit deeper than the limit, and a repository missing from the list is worse than a scan that takes a moment longer, because nothing on screen says it is missing."
         },
-        "repoLedger.dirty.enabled": {
+        "multirepoLedger.dirty.enabled": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show which repositories have uncommitted changes. This is the one read that has to walk the working tree, so it costs a second `git` process for each repository on screen, and on a very large checkout or a network share it is the read you would feel. What it buys is the only column every dedicated multi-repository status tool agrees on: the `*`, `+` and `!` markers that say a repository holds work not yet committed - the work that exists nowhere but this disk. While this is off the Ledger says nothing in that position rather than showing a zero, because a repository nobody asked about is not a repository that is clean."
         },
-        "repoLedger.concurrency": {
+        "multirepoLedger.concurrency": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 64,
           "markdownDescription": "How many repositories are read at the same time. Leave this at `0` and the Ledger works it out from what this machine says it can run at once, which is the right answer on almost every machine: reading a repository costs starting a `git` process and waiting, so the number that suits a four-core laptop is not the one that suits a thirty-two-core workstation. Set it yourself when you know something the Ledger cannot - a slow network share that dislikes many readers at once, or a machine where you would rather the scan took longer and stayed out of the way. Lower is gentler and slower; higher finishes sooner and holds more processes open at once."
         },
-        "repoLedger.forge.enabled": {
+        "multirepoLedger.forge.enabled": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show open merge and pull request counts on each row. This runs the `gh` and `glab` command line tools, which reach the network and use whatever credentials those tools already hold on this machine; the extension never asks for a token and never stores one. While this is off neither tool is invoked and nothing leaves the machine. It ships off because everything else the Ledger does is a local read, and a network call is not something an extension should start making on its own."
         },
-        "repoLedger.history.pageSize": {
+        "multirepoLedger.fetch.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Offer a **Fetch** button on each row and in the view title. This runs `git fetch` - exactly that, with nothing added - which is the one thing the Ledger does that writes inside a repository: it updates remote-tracking refs, `FETCH_HEAD` and objects. It never touches your working tree, your branches or any commit you have made, and it does not merge, rebase, push or prune, so nothing it does can conflict or lose work.\n\nIt is here because without it half the board is a claim about the past: ahead and behind are measured against remote-tracking refs, which are exactly as old as your last fetch, so a row can read *in sync* having asked its server nothing for a month.\n\nIt ships off because it reaches the network using whatever credentials `git` already holds on this machine. When a repository needs credentials the fetch **fails immediately** rather than waiting on a prompt that can never be answered, and the failure is reported with git’s own words and the exact command."
+        },
+        "multirepoLedger.fetch.concurrency": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 32,
+          "markdownDescription": "How many repositories are fetched at the same time. Unlike `#multirepoLedger.concurrency#` this cannot be worked out from your machine: the limit here belongs to a server the Ledger cannot see, and twenty simultaneous connections to one host is a thing a status board should not do on its own. The default is deliberately timid rather than measured. Raise it when you know the remote can take it; lower it on a slow link or a host that throttles."
+        },
+        "multirepoLedger.history.pageSize": {
           "type": "number",
           "default": 50,
           "minimum": 5,
           "maximum": 500,
           "markdownDescription": "How many commits the history pane reads at a time. Each page is one `git log`, so a larger page means fewer reads while you scroll and a longer wait for the first one. The pane never asks for a whole history: a repository with ten years of it would hand the panel a document it has to lay out in a single frame."
+        },
+        "multirepoLedger.badge": {
+          "type": "string",
+          "default": "unpushed",
+          "enum": [
+            "unpushed",
+            "dirty",
+            "behind",
+            "attention",
+            "unreadable",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Repositories holding commits that exist only on this machine.",
+            "Repositories with uncommitted changes. Needs the working-tree read above to be on; while that is off this counts nothing and no badge appears.",
+            "Repositories behind their upstream.",
+            "Repositories on a detached HEAD, mid-operation, unborn or without an upstream.",
+            "Repositories git would not answer for.",
+            "No badge."
+          ],
+          "markdownDescription": "What the number on the Activity Bar icon counts. Every option here is also a chip on the board, so one click shows exactly the repositories the badge counted. A count of none draws no badge at all rather than a `0`, because a nought that is always there says nothing while still catching the eye."
         }
       }
     }

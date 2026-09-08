@@ -6,7 +6,7 @@
  * answers for the open folders sooner than a walk of the same directories can.
  * It is only ever half the answer: it returns nothing when no folder is open -
  * which for this extension is an ordinary window rather than an edge case - it
- * cannot see `repoLedger.additionalRoots`, and it is structurally blind to a
+ * cannot see `multirepoLedger.additionalRoots`, and it is structurally blind to a
  * bare repository, which has no `.git` at any path. `search.ts` covers the rest
  * and is the authority; this is the accelerator, and losing it costs only the
  * first paint.
@@ -130,7 +130,7 @@ async function searchWorkspace(signal?: AbortSignal): Promise<RepositoryCandidat
  * The cost is that the search reaches into directories the user has hidden.
  * That is paid back on the results rather than in the query: `repositories.ts`
  * applies the walk's own directory-name list to everything this returns, and
- * `repoLedger.exclude` removes a named repository from the board entirely.
+ * `multirepoLedger.exclude` removes a named repository from the board entirely.
  */
 async function findFiles(
   include: string,

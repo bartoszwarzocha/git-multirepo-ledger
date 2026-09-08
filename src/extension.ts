@@ -19,19 +19,19 @@ import { log, setLogSink } from './util/log.ts';
 let controller: LedgerController | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const channel = vscode.window.createOutputChannel('Repo Ledger');
+  const channel = vscode.window.createOutputChannel('Multirepo Ledger');
   context.subscriptions.push(channel);
   setLogSink((_level, line) => channel.appendLine(line));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('repoLedger.showOutput', () => channel.show(true)),
+    vscode.commands.registerCommand('multirepoLedger.showOutput', () => channel.show(true)),
   );
 
   const instance = new LedgerController(context);
   controller = instance;
   context.subscriptions.push(instance);
 
-  log.info(`Repo Ledger activated (${context.extension.packageJSON.version ?? 'dev'})`);
+  log.info(`Multirepo Ledger activated (${context.extension.packageJSON.version ?? 'dev'})`);
 
   setTimeout(() => {
     void instance.start().catch((error: unknown) => log.error('start failed', error));

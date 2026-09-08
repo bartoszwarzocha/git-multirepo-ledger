@@ -14,7 +14,7 @@ re-walk), D67 (a candidate inside a known working tree is dropped, whoever found
 ### Requirement: Recursive discovery of git repositories beneath every root
 
 The system SHALL locate every git repository at any depth beneath every open workspace folder and
-beneath every absolute path listed in `repoLedger.additionalRoots`.
+beneath every absolute path listed in `multirepoLedger.additionalRoots`.
 
 A git repository is a directory holding a `.git` entry — a directory or a file — or a directory that
 is itself a bare repository layout (`HEAD`, `config`, `objects/`, `refs/`).
@@ -36,13 +36,13 @@ activation path.
   not the path of `.git` itself
 
 #### Scenario: A root that is itself a repository
-- **WHEN** a path in `repoLedger.additionalRoots` contains `.git` directly
+- **WHEN** a path in `multirepoLedger.additionalRoots` contains `.git` directly
 - **THEN** discovery SHALL return exactly one repository, that path
 - **AND** SHALL NOT return anything below it
 
 #### Scenario: A repository both sources found appears once
 - **WHEN** a repository lies beneath an open workspace folder
-- **AND** that same folder is also listed in `repoLedger.additionalRoots`
+- **AND** that same folder is also listed in `multirepoLedger.additionalRoots`
 - **THEN** the list SHALL show exactly one row for it
 - **AND** the header's `showing N of M` SHALL count it once
 
@@ -73,7 +73,7 @@ Each pass SHALL be capped with `maxResults`, which is a guard against paging an 
 into the extension host and not a limit on how many repositories the board shows.
 
 Because the query carries no excludes, the extension SHALL apply its own directory-name exclusion
-list and `repoLedger.exclude` to every path the index returns.
+list and `multirepoLedger.exclude` to every path the index returns.
 
 #### Scenario: The editor's default excludes do not hide repositories
 - **WHEN** `files.exclude` carries its default entry `"**/.git": true`
@@ -105,7 +105,7 @@ list and `repoLedger.exclude` to every path the index returns.
 #### Scenario: No workspace folder is open
 - **WHEN** no workspace folder is open
 - **THEN** the index SHALL return nothing and that SHALL NOT be treated as a failure
-- **AND** discovery SHALL still return every repository beneath `repoLedger.additionalRoots`
+- **AND** discovery SHALL still return every repository beneath `multirepoLedger.additionalRoots`
 - **AND** no error SHALL be raised
 
 #### Scenario: An index pass reaches its result cap
@@ -118,7 +118,7 @@ list and `repoLedger.exclude` to every path the index returns.
 
 ### Requirement: Additional roots from configuration
 
-The system SHALL accept a list of absolute directory paths in `repoLedger.additionalRoots` and SHALL
+The system SHALL accept a list of absolute directory paths in `multirepoLedger.additionalRoots` and SHALL
 include every repository found at or beneath each of them, whether or not the path lies inside an
 open workspace folder.
 
@@ -129,7 +129,7 @@ of intent and refusing it would break the ordinary `~/src -> /Volumes/work` layo
 directory-name exclusion list SHALL NOT apply to a directory the user named.
 
 #### Scenario: A root outside the workspace is scanned
-- **WHEN** `repoLedger.additionalRoots` contains `D:\work\clones`, which holds twelve repositories
+- **WHEN** `multirepoLedger.additionalRoots` contains `D:\work\clones`, which holds twelve repositories
 - **AND** no workspace folder is open
 - **THEN** the list SHALL show twelve rows
 
@@ -151,7 +151,7 @@ directory-name exclusion list SHALL NOT apply to a directory the user named.
 - **AND** SHALL return the repositories beneath it
 
 #### Scenario: One configured root contains another
-- **WHEN** `repoLedger.additionalRoots` contains both `D:\work` and `D:\work\clones`
+- **WHEN** `multirepoLedger.additionalRoots` contains both `D:\work` and `D:\work\clones`
 - **THEN** every repository SHALL appear exactly once
 
 ---
@@ -164,7 +164,7 @@ SHALL NOT descend into the working tree of a repository it has just found.
 This is what makes the walk's cost a function of the number of directories above the repositories
 rather than of what is inside them, and working trees are exactly where `node_modules`, `target`,
 `.venv` and `dist` live. A repository the walk therefore declines to enter is reachable in one line
-of settings by naming it, or its parent, in `repoLedger.additionalRoots`.
+of settings by naming it, or its parent, in `multirepoLedger.additionalRoots`.
 
 #### Scenario: A vendored repository inside a working tree is not returned
 - **WHEN** a discovered repository contains `node_modules/some-package/.git`
@@ -180,12 +180,12 @@ of settings by naming it, or its parent, in `repoLedger.additionalRoots`.
 #### Scenario: An initialised submodule beneath an open folder gets no row by default
 - **WHEN** a repository beneath an open workspace folder has an initialised submodule at
   `<repo>/sub`, so the `**/.git` index pass returns `<repo>/sub/.git`
-- **AND** `repoLedger.includeSubmodules` is `false`
+- **AND** `multirepoLedger.includeSubmodules` is `false`
 - **THEN** the list SHALL show one row, for the superproject
 - **AND** SHALL NOT show a row marked `submodule` at any point during the pass
 
 #### Scenario: Naming the inner repository makes it appear
-- **WHEN** `repoLedger.additionalRoots` gains `<repo>\vendor\other-project`, or `<repo>\vendor`
+- **WHEN** `multirepoLedger.additionalRoots` gains `<repo>\vendor\other-project`, or `<repo>\vendor`
 - **THEN** the list SHALL show two rows, one for each repository
 - **AND** each row SHALL state its own HEAD
 
@@ -268,7 +268,7 @@ A kind marker SHALL be shown on line 3 only when the repository is not an ordina
 The system SHALL show one row per working tree with a HEAD of its own.
 
 A linked worktree found beneath a scanned root SHALL get its own row. A submodule SHALL get its own
-row only while `repoLedger.includeSubmodules` is `true`, which defaults to `false`; submodules are
+row only while `multirepoLedger.includeSubmodules` is `true`, which defaults to `false`; submodules are
 read from the superproject's `.gitmodules`, not found by walking, because the walk stops at the
 superproject. A submodule listed in `.gitmodules` whose directory holds no `.git` is not initialised
 and SHALL get no row.
@@ -281,18 +281,18 @@ and SHALL get no row.
 
 #### Scenario: Submodules are absent by default
 - **WHEN** a discovered repository has an initialised submodule at `<repo>/sub`
-- **AND** `repoLedger.includeSubmodules` is `false`
+- **AND** `multirepoLedger.includeSubmodules` is `false`
 - **THEN** the list SHALL show one row, for the superproject
 - **AND** `<repo>/sub` SHALL NOT be counted in `showing N of M` or in any header tally
 
 #### Scenario: Submodules appear when the setting is on
-- **WHEN** `repoLedger.includeSubmodules` is set to `true`
+- **WHEN** `multirepoLedger.includeSubmodules` is set to `true`
 - **THEN** the list SHALL show a row for `<repo>/sub` carrying the `submodule` marker
 - **AND** that row SHALL have been discovered without spawning a process
 
 #### Scenario: An uninitialised submodule gets no row
 - **WHEN** `.gitmodules` lists a submodule whose directory holds no `.git`
-- **AND** `repoLedger.includeSubmodules` is `true`
+- **AND** `multirepoLedger.includeSubmodules` is `true`
 - **THEN** no row SHALL be shown for it
 - **AND** no placeholder or error row SHALL be shown in its place
 
@@ -300,7 +300,7 @@ and SHALL get no row.
 
 ### Requirement: The depth bound is a stop against a cycle, not a performance setting
 
-The system SHALL bound the walk at `repoLedger.maxDepth` levels below each root, default `32`,
+The system SHALL bound the walk at `multirepoLedger.maxDepth` levels below each root, default `32`,
 minimum `1`. No value of the setting SHALL mean "unlimited".
 
 The bound exists so a symlink cycle the directory-entry check misses, or a root that turns out to be
@@ -311,17 +311,17 @@ depth, the number of directories left unsearched and the first of them.
 
 #### Scenario: The default reaches a real layout
 - **WHEN** a repository sits six levels below a scanned root
-- **THEN** discovery SHALL return it under the default `repoLedger.maxDepth`
+- **THEN** discovery SHALL return it under the default `multirepoLedger.maxDepth`
 
 #### Scenario: The bound stops the walk and the log says so
-- **WHEN** `repoLedger.maxDepth` is `2`
+- **WHEN** `multirepoLedger.maxDepth` is `2`
 - **AND** a repository sits four levels below a root
 - **THEN** discovery SHALL NOT return that repository
 - **AND** the output channel SHALL record the depth at which the search stopped, the number of
   unsearched directories and the first of them
 
 #### Scenario: Lowering the bound hides repositories with nothing on the board to say so
-- **WHEN** `repoLedger.maxDepth` is lowered below the depth of an existing repository
+- **WHEN** `multirepoLedger.maxDepth` is lowered below the depth of an existing repository
 - **THEN** that repository's row SHALL disappear on the next pass
 - **AND** the only evidence of it SHALL be the log line recording the stop
 
@@ -347,7 +347,7 @@ bounded by depth. A root the user named is the exception: it is resolved and wal
 
 #### Scenario: A linked directory inside a root is not entered
 - **WHEN** a directory inside a scanned root is a symbolic link to a directory of repositories
-- **AND** neither it nor its target is named in `repoLedger.additionalRoots`
+- **AND** neither it nor its target is named in `multirepoLedger.additionalRoots`
 - **THEN** those repositories SHALL NOT appear on the list
 
 #### Scenario: The same repository reached two ways appears once
@@ -366,7 +366,7 @@ Reaching the budget SHALL be written to the log with the count of directories vi
 unsearched directory, and SHALL be stated on the list.
 
 #### Scenario: A root pointed at a drive root reports rather than hangs
-- **WHEN** `repoLedger.additionalRoots` contains `C:\`
+- **WHEN** `multirepoLedger.additionalRoots` contains `C:\`
 - **THEN** the walk SHALL stop at the budget
 - **AND** the output channel SHALL record the count and the first unsearched directory
 - **AND** the list SHALL state that the search stopped before it finished
@@ -386,7 +386,7 @@ The walk SHALL skip a fixed list of directory names when deciding what to descen
 removed from it, because in this project `.git` means "stop here" rather than "skip this". The list
 is not a setting, and it never applies to a directory the user named as a root.
 
-`repoLedger.exclude` SHALL remove a named repository from the extension entirely: it is not walked
+`multirepoLedger.exclude` SHALL remove a named repository from the extension entirely: it is not walked
 into, not read, not counted in any header tally, and not present in the `M` of `showing N of M`.
 Exclusion is permanent and silent, which is why it lives in settings rather than in the header, where
 filtering is momentary and states its effect.
@@ -402,7 +402,7 @@ filtering is momentary and states its effect.
 - **THEN** discovery SHALL NOT return it, from the walk or from the index
 
 #### Scenario: An excluded repository is absent from everything
-- **WHEN** `repoLedger.exclude` contains the absolute path of a discovered repository
+- **WHEN** `multirepoLedger.exclude` contains the absolute path of a discovered repository
 - **THEN** no row SHALL be shown for it
 - **AND** it SHALL NOT be counted in `showing N of M`
 - **AND** it SHALL NOT be counted in the `unreadable` tally, even when git would have refused it
@@ -443,7 +443,7 @@ hundred repositories feeling answered and feeling absent.
   URIs, because the content security policy admits no navigation
 
 #### Scenario: No folder open and no additional root configured
-- **WHEN** no workspace folder is open and `repoLedger.additionalRoots` is empty
+- **WHEN** no workspace folder is open and `multirepoLedger.additionalRoots` is empty
 - **THEN** the list SHALL state that there is nothing to scan
 - **AND** SHALL offer both ways out: opening a folder, and configuring an additional root
 - **AND** no error SHALL be raised
@@ -452,7 +452,7 @@ hundred repositories feeling answered and feeling absent.
 
 ### Requirement: What re-runs discovery, and what does not
 
-The system SHALL re-run discovery when a workspace folder is added or removed, when a `repoLedger.*`
+The system SHALL re-run discovery when a workspace folder is added or removed, when a `multirepoLedger.*`
 setting that changes what is scanned or which repositories are shown is changed, and when the user
 invokes the Refresh command.
 
@@ -465,8 +465,8 @@ watcher event on a repository's git directory re-reads that repository and nothi
 - **AND** repositories beneath the new folder SHALL appear
 
 #### Scenario: A discovery setting changes
-- **WHEN** `repoLedger.additionalRoots`, `repoLedger.exclude`, `repoLedger.maxDepth` or
-  `repoLedger.includeSubmodules` changes
+- **WHEN** `multirepoLedger.additionalRoots`, `multirepoLedger.exclude`, `multirepoLedger.maxDepth` or
+  `multirepoLedger.includeSubmodules` changes
 - **THEN** discovery SHALL re-run
 - **AND** the list SHALL reflect the new set of repositories
 
@@ -575,7 +575,7 @@ indistinguishable from a repository that was never there.
 #### Scenario: The board's count equals what discovery found
 - **WHEN** a pass completes with some repositories unreadable and some still reading
 - **THEN** the number of rows SHALL equal the number of repositories discovery found, less those
-  removed by `repoLedger.exclude`
+  removed by `multirepoLedger.exclude`
 - **AND** no repository SHALL have been dropped for failing to answer
 
 ---
@@ -611,7 +611,7 @@ above follows what the design implies; none of them invents a decision.
    keyed by stamp", and no decision says what is retained between passes or what the stamp is taken
    from. The requirements above specify only the observable half: which events re-walk and which do
    not.
-6. **`repoLedger.includeSubmodules` is not in the manifest.** D9 introduces it, defaulting to
+6. **`multirepoLedger.includeSubmodules` is not in the manifest.** D9 introduces it, defaulting to
    `false`; `package.json` currently declares only `additionalRoots`, `exclude`, `maxDepth` and
    `forge.enabled`. The proposal's manifest-change note covers the history view's `type` but not
    this setting.

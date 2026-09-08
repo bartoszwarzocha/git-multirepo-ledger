@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  ## Project: Repo Ledger
+  ## Project: Multirepo Ledger
 
   A VS Code extension that reads a *directory of git repositories* and answers, in one
   glance, what state every one of them is in: what moved last, on which branch, how far

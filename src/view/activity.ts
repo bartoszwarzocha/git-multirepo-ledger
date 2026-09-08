@@ -7,6 +7,7 @@
  * extension host.
  */
 
+import type { ActivityAuthor } from '../model/types.ts';
 import type { ActivityEntry, ActivityFailure } from '../read/activity.ts';
 import { relativeAge } from './row.ts';
 
@@ -45,12 +46,39 @@ export function sinceFor(period: ActivityPeriod): string {
   }
 }
 
+/**
+ * Who a commit is by, as a key two spellings of one person share.
+ *
+ * The address, lowercased. Lowercased because a mailbox that answers to
+ * `Ada@example.com` answers to `ada@example.com`, and nobody configures the two
+ * intending different people; the domain is case-insensitive by RFC and the
+ * local part is only theoretically not.
+ *
+ * The name is the fallback, not the key. `user.email` can be empty - git writes
+ * `<>` and commits it - and two authorless commits by different people would
+ * otherwise become one person with an empty address. The fallback is namespaced
+ * so a name can never collide with somebody's real address.
+ *
+ * Deliberately no cleverness beyond that: no stripping of `+` tags, no matching
+ * a GitHub noreply address to the account behind it, no comparing names. Each
+ * would merge people this extension cannot prove are the same, and a wrongly
+ * merged author is invisible - the reader sees a plausible total and no sign
+ * that it covers two people.
+ */
+export function authorIdOf(commit: {
+  readonly author: string;
+  readonly authorEmail: string;
+}): string {
+  const email = commit.authorEmail.trim().toLowerCase();
+  return email.length > 0 ? email : `name:${commit.author.trim().toLowerCase()}`;
+}
+
 /** What the digest is narrowed to. */
 export interface ActivityFilter {
   /** Only commits with more than one parent. */
   readonly mergesOnly: boolean;
-  /** Exact author name, as git recorded it. Absent means every author. */
-  readonly author?: string;
+  /** One person's identity key, from `authorIdOf`. Absent means everybody. */
+  readonly authorId?: string;
 }
 
 export function filterActivity(
@@ -61,19 +89,122 @@ export function filterActivity(
     if (filter.mergesOnly && entry.commit.parents.length < 2) {
       return false;
     }
-    return filter.author === undefined || entry.commit.author === filter.author;
+    return filter.authorId === undefined || authorIdOf(entry.commit) === filter.authorId;
   });
 }
 
-/** Every author present, by descending share of the list, then by name. */
-export function authorsOf(entries: readonly ActivityEntry[]): string[] {
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    counts.set(entry.commit.author, (counts.get(entry.commit.author) ?? 0) + 1);
+/**
+ * Everyone present, by descending share of the list, then by name.
+ *
+ * One entry per address, carrying every name that address has committed under.
+ * The name shown is the one used most often, so the picker reads the way the
+ * team writes their own name rather than however the last machine was set up;
+ * ties go to the alphabet so the label cannot flip between two equal spellings
+ * from one refresh to the next.
+ */
+export function authorsOf(entries: readonly ActivityEntry[]): ActivityAuthor[] {
+  interface Bucket {
+    readonly id: string;
+    email: string;
+    readonly names: Map<string, number>;
+    commits: number;
   }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([author]) => author);
+
+  const buckets = new Map<string, Bucket>();
+  for (const entry of entries) {
+    const id = authorIdOf(entry.commit);
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { id, email: entry.commit.authorEmail.trim(), names: new Map(), commits: 0 };
+      buckets.set(id, bucket);
+    }
+    bucket.commits += 1;
+    bucket.names.set(entry.commit.author, (bucket.names.get(entry.commit.author) ?? 0) + 1);
+  }
+
+  return [...buckets.values()]
+    .map((bucket) => {
+      const names = [...bucket.names.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name]) => name);
+      return {
+        id: bucket.id,
+        // An address with no name behind it labels itself; falling back to the
+        // key would print `name:` at somebody.
+        label: names[0] !== undefined && names[0].length > 0 ? names[0] : bucket.email,
+        email: bucket.email,
+        names,
+        commits: bucket.commits,
+      };
+    })
+    .sort((a, b) => b.commits - a.commits || a.label.localeCompare(b.label));
+}
+
+/**
+ * What to print on a commit row.
+ *
+ * The person, as the picker above names them - plus the commit's own spelling
+ * when it differs, so the list reads consistently with the control that filters
+ * it while the record itself is never overwritten, only annotated.
+ */
+export function authorOf(
+  entry: ActivityEntry,
+  labels: ReadonlyMap<string, string>,
+): { readonly author: string; readonly recordedAs?: string } {
+  const recorded = entry.commit.author;
+  const label = labels.get(authorIdOf(entry.commit)) ?? recorded;
+  return label === recorded ? { author: label } : { author: label, recordedAs: recorded };
+}
+
+/** One entry of the Author control. */
+export interface AuthorOption {
+  readonly id: string;
+  /** What the option reads. */
+  readonly text: string;
+  /** The hover. Empty when there is nothing to add. */
+  readonly title: string;
+}
+
+/**
+ * The Author control's options.
+ *
+ * Two colleagues genuinely called the same thing are told apart in the option
+ * itself, not only in a tooltip: a `<select>` shows one line at a time, and two
+ * identical lines are a control a reader cannot use. Everyone else keeps a bare
+ * name, because appending an address to every option would make the common case
+ * unreadable to fix the rare one.
+ */
+export function authorOptions(authors: readonly ActivityAuthor[]): AuthorOption[] {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const author of authors) {
+    if (seen.has(author.label)) {
+      shared.add(author.label);
+    }
+    seen.add(author.label);
+  }
+
+  return authors.map((author) => ({
+    id: author.id,
+    text:
+      shared.has(author.label) && author.email.length > 0
+        ? `${author.label} <${author.email}>`
+        : author.label,
+    title: [
+      author.email.length > 0 ? author.email : 'no address on these commits',
+      author.names.length > 1 ? `also commits as ${author.names.slice(1).join(', ')}` : undefined,
+      // Said out loud, because an option that selects nothing otherwise looks
+      // like a filter that has stopped working.
+      author.commits === 0 ? 'nothing in this range' : undefined,
+    ]
+      .filter((part) => part !== undefined)
+      .join(' \u2014 '),
+  }));
+}
+
+/** Identity key to display name, for surfaces that show one commit at a time. */
+export function authorLabels(authors: readonly ActivityAuthor[]): Map<string, string> {
+  return new Map(authors.map((author) => [author.id, author.label]));
 }
 
 /** One calendar day of the digest. */
@@ -159,7 +290,10 @@ export function summarise(
 ): ActivitySummary {
   const repositories = new Set(entries.map((entry) => entry.repositoryPath)).size;
   const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
-  const authors = new Set(entries.map((entry) => entry.commit.author)).size;
+  // Counted by identity, not by spelling: one person committing under two
+  // `user.name` settings is one author, and saying otherwise inflated every
+  // digest they appeared in.
+  const authors = new Set(entries.map((entry) => authorIdOf(entry.commit))).size;
 
   const window =
     period === 'all'

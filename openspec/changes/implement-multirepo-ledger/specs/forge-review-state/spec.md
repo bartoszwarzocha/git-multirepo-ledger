@@ -12,7 +12,7 @@ carries the count), D63 (activation order) and D65 (every outbound path).
 
 ### Requirement: The layer ships off, and nothing leaves the machine until it is switched on
 
-The system SHALL default `repoLedger.forge.enabled` to `false`. While it is `false` the system
+The system SHALL default `multirepoLedger.forge.enabled` to `false`. While it is `false` the system
 SHALL NOT spawn `gh` or `glab`, SHALL NOT probe for their presence, SHALL NOT read any remote for
 the purpose of grouping repositories into queries, and SHALL render nothing at all in the review
 position of any row.
@@ -28,17 +28,17 @@ position to rendering nothing.
 - **AND** the output channel SHALL record no forge command
 
 #### Scenario: The off state is empty, not zero
-- **WHEN** `repoLedger.forge.enabled` is `false`
+- **WHEN** `multirepoLedger.forge.enabled` is `false`
 - **THEN** line 3 of every row SHALL carry the HEAD state and, where it applies, the kind marker
 - **AND** SHALL NOT carry `0`, a dash, or an empty placeholder where a count would go
 
 #### Scenario: Switching it on needs no reload
-- **WHEN** the user sets `repoLedger.forge.enabled` to `true` with the list already populated
+- **WHEN** the user sets `multirepoLedger.forge.enabled` to `true` with the list already populated
 - **THEN** the batched queries SHALL be planned and issued in the same window
 - **AND** the review position of every row whose owner is being asked SHALL show the pending form
 
 #### Scenario: Switching it off cancels what is running
-- **WHEN** `repoLedger.forge.enabled` is set to `false` while a query is in flight
+- **WHEN** `multirepoLedger.forge.enabled` is set to `false` while a query is in flight
 - **THEN** the child process SHALL be killed
 - **AND** its answer SHALL NOT be rendered on any row
 - **AND** every review position SHALL render nothing
@@ -106,7 +106,7 @@ user's next explicit Refresh.
 - **WHEN** a pass has ended with owners reporting `rate limited`
 - **AND** the user does nothing
 - **THEN** no forge query SHALL be issued at any later moment
-- **WHEN** the user then invokes `repoLedger.refresh`
+- **WHEN** the user then invokes `multirepoLedger.refresh`
 - **THEN** one query per distinct owner SHALL be issued again
 
 ---
@@ -236,7 +236,7 @@ silence — a repository the parse grouped wrongly, or could not group at all, S
 unestablished count, and SHALL NOT receive the count belonging to another namespace.
 
 #### Scenario: Enabling the layer spawns no additional git process
-- **WHEN** `repoLedger.forge.enabled` is switched on with forty repositories on the board
+- **WHEN** `multirepoLedger.forge.enabled` is switched on with forty repositories on the board
 - **THEN** the output channel SHALL record one forge command per distinct owner
 - **AND** SHALL record no additional `git` invocation attributable to the forge layer
 
@@ -404,7 +404,7 @@ hostname.
 
 #### Scenario: The settings UI offers no token field
 - **WHEN** the user opens the settings for this extension
-- **THEN** the only forge-related setting SHALL be `repoLedger.forge.enabled`
+- **THEN** the only forge-related setting SHALL be `multirepoLedger.forge.enabled`
 - **AND** no setting for a token, a credential, an account or an API base URL SHALL be offered
 
 #### Scenario: The log holds commands and exit codes, not secrets
@@ -421,7 +421,7 @@ hostname.
 ### Requirement: Queries are issued at three moments and at no other
 
 The system SHALL issue forge queries when the layer is enabled and the list is first populated,
-when the user invokes Refresh, and when `repoLedger.forge.enabled` is switched on. It SHALL NOT
+when the user invokes Refresh, and when `multirepoLedger.forge.enabled` is switched on. It SHALL NOT
 issue one on a file-watcher event, and SHALL NOT issue one on a timer.
 
 #### Scenario: Working in a terminal generates no network traffic
@@ -492,7 +492,7 @@ working tree or history SHALL NOT change what the forge layer reports about it.
 - **AND** the absence of a working tree SHALL NOT change its review state
 
 #### Scenario: A submodule shown as its own row is grouped from its own remote
-- **WHEN** `repoLedger.includeSubmodules` is on and a submodule has a row
+- **WHEN** `multirepoLedger.includeSubmodules` is on and a submodule has a row
 - **THEN** its owner SHALL be taken from its own configuration, not from the superproject's
 - **AND** the superproject's answer SHALL NOT populate its review position
 
@@ -502,7 +502,7 @@ working tree or history SHALL NOT change what the forge layer reports about it.
 - **AND** SHALL NOT report `0` open requests
 
 #### Scenario: An excluded repository is in no query
-- **WHEN** a repository's path is listed in `repoLedger.exclude`
+- **WHEN** a repository's path is listed in `multirepoLedger.exclude`
 - **THEN** it SHALL contribute no owner to the query plan
 - **AND** SHALL appear in no count and in no header sentence
 

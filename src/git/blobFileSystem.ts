@@ -32,7 +32,7 @@ import { runGitBuffer } from '../util/git.ts';
  * The scheme. Private to this extension, and registered read-only, so nothing
  * outside can be written through it.
  */
-export const BLOB_SCHEME = 'repo-ledger';
+export const BLOB_SCHEME = 'multirepo-ledger';
 
 /**
  * Build the URI for one path at one commit.
@@ -148,22 +148,22 @@ export class BlobFileSystemProvider implements vscode.FileSystemProvider {
   // than silently doing nothing, so a future caller that tries to write through
   // this scheme fails loudly here instead of appearing to succeed.
   readDirectory(): [string, vscode.FileType][] {
-    throw vscode.FileSystemError.NoPermissions('Repo Ledger blobs are files, not directories');
+    throw vscode.FileSystemError.NoPermissions('Multirepo Ledger blobs are files, not directories');
   }
 
   createDirectory(): void {
-    throw vscode.FileSystemError.NoPermissions('Repo Ledger never writes to a repository');
+    throw vscode.FileSystemError.NoPermissions('Multirepo Ledger never writes to a repository');
   }
 
   writeFile(): void {
-    throw vscode.FileSystemError.NoPermissions('Repo Ledger never writes to a repository');
+    throw vscode.FileSystemError.NoPermissions('Multirepo Ledger never writes to a repository');
   }
 
   delete(): void {
-    throw vscode.FileSystemError.NoPermissions('Repo Ledger never writes to a repository');
+    throw vscode.FileSystemError.NoPermissions('Multirepo Ledger never writes to a repository');
   }
 
   rename(): void {
-    throw vscode.FileSystemError.NoPermissions('Repo Ledger never writes to a repository');
+    throw vscode.FileSystemError.NoPermissions('Multirepo Ledger never writes to a repository');
   }
 }

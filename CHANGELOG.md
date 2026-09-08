@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Repo Ledger are recorded here, in the format of
+All notable changes to Multirepo Ledger are recorded here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -14,7 +14,7 @@ All notable changes to Repo Ledger are recorded here, in the format of
   bare or shallow. The default ordering is by last commit, which no other repository list in the
   editor offers.
 - **Discovery at any depth**, beneath the open folders and beneath absolute directories named in
-  `repoLedger.additionalRoots`. Finding a `.git` ends the walk of that subtree, so a repository's
+  `multirepoLedger.additionalRoots`. Finding a `.git` ends the walk of that subtree, so a repository's
   own subdirectories are not further repositories; a `.git` that is a *file* — a linked worktree or
   a submodule — is resolved and classified from the filesystem before any process is spawned; and a
   candidate that turns out to sit inside another repository's working tree is dropped whichever
@@ -39,9 +39,9 @@ All notable changes to Repo Ledger are recorded here, in the format of
   directory of any size. A count whose query stopped at its own limit renders as `41+`; a host with
   no client, a tool that is not installed and a tool that is not signed in each render as silence
   with their own sentence, never as a zero.
-- Settings: `repoLedger.additionalRoots`, `repoLedger.exclude`, `repoLedger.maxDepth`,
-  `repoLedger.dirty.enabled`, `repoLedger.concurrency`, `repoLedger.history.pageSize` and
-  `repoLedger.forge.enabled`.
+- Settings: `multirepoLedger.additionalRoots`, `multirepoLedger.exclude`, `multirepoLedger.maxDepth`,
+  `multirepoLedger.dirty.enabled`, `multirepoLedger.concurrency`, `multirepoLedger.history.pageSize` and
+  `multirepoLedger.forge.enabled`.
 - The scaffolding this all sits on: the manifest, the esbuild bundle, eslint, `node:test`, CI on
   Ubuntu and Windows, the Activity Bar glyph and the Marketplace icon, and `src/util/git.ts`,
   `fsx.ts` and `log.ts` adapted from the sibling project `openspec-ledger`.
@@ -74,5 +74,5 @@ All notable changes to Repo Ledger are recorded here, in the format of
   controller and have no button yet.
 - Verification by a person. Nobody has run the empty and unusual states by hand in the Extension
   Development Host, and the `glab` path has never met a real `glab`. Both are recorded as open in
-  `openspec/changes/implement-repo-ledger/tasks.md` rather than quietly ticked.
+  `openspec/changes/implement-multirepo-ledger/tasks.md` rather than quietly ticked.
 - A Marketplace release. Nothing is published.

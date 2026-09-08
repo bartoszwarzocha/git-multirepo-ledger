@@ -32,7 +32,7 @@ export type HistoryRequest =
   | { readonly type: 'report' };
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
-  static readonly viewType = 'repoLedger.history';
+  static readonly viewType = 'multirepoLedger.history';
 
   private readonly requested = new vscode.EventEmitter<HistoryRequest>();
   private readonly listeners: vscode.Disposable[] = [];
@@ -207,7 +207,12 @@ function renderActivityEntry(entry: ActivityEntryView): string {
   return (
     `<button type="button" class="act${entry.merge ? ' merge' : ''}"` +
     ` data-repo="${escapeHtml(entry.repositoryPath)}" data-sha="${escapeHtml(entry.sha)}"` +
-    ` title="${escapeHtml(`${entry.subject}\n\n${entry.shortSha} · ${entry.author} · ${entry.label}`)}">` +
+    ` title="${escapeHtml(
+      `${entry.subject}\n\n${entry.shortSha} · ${entry.author}` +
+        // The commit's own spelling of the name, when the row is showing the
+        // person's usual one instead. Neither is hidden from the reader.
+        `${entry.recordedAs === undefined ? '' : ` (committed as ${entry.recordedAs})`} · ${entry.label}`,
+    )}">` +
     `<span class="a1"><span class="time">${escapeHtml(entry.time)}</span>` +
     `<span class="repo">${escapeHtml(entry.label)}</span>` +
     `<span class="who">${escapeHtml(entry.author)}</span>` +
@@ -541,21 +546,14 @@ document.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) { return; }
 
-  const mode = target.closest('button[data-mode]');
-  if (mode) {
-    const value = mode.getAttribute('data-mode');
-    api.postMessage(value === 'selected' ? { type: 'mode' } : { type: 'mode', period: value });
+  const scope = target.closest('button[data-scope]');
+  if (scope) {
+    api.postMessage({ type: 'scope', scope: scope.getAttribute('data-scope') });
     return;
   }
 
   if (target.closest('button[data-report]')) {
     api.postMessage({ type: 'report' });
-    return;
-  }
-
-  const merges = target.closest('button[data-merges]');
-  if (merges) {
-    api.postMessage({ type: 'activityFilter', mergesOnly: merges.getAttribute('data-merges') === 'on' });
     return;
   }
 
@@ -566,27 +564,6 @@ document.addEventListener('click', (event) => {
       repositoryPath: act.getAttribute('data-repo'),
       sha: act.getAttribute('data-sha'),
     });
-    return;
-  }
-
-  const file = target.closest('button.file');
-  if (file) {
-    api.postMessage({
-      type: 'diff',
-      sha: file.getAttribute('data-sha'),
-      path: file.getAttribute('data-path'),
-    });
-    return;
-  }
-
-  if (target.closest('button[data-more]')) {
-    api.postMessage({ type: 'more' });
-    return;
-  }
-
-  const commit = target.closest('button.commit-main');
-  if (commit) {
-    api.postMessage({ type: 'expand', sha: commit.getAttribute('data-sha') });
   }
 });
 `;

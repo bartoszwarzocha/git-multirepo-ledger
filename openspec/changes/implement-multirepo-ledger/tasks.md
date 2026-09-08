@@ -1,4 +1,4 @@
-# Tasks — implement-repo-ledger
+# Tasks — implement-multirepo-ledger
 
 Phase 0 is already done and is ticked below; it is the scaffold this change builds on, recorded as
 phase 0 so that the first group of *work* is unambiguously discovery and the row read. Phases 2-5
@@ -27,7 +27,7 @@ Already complete. `npm run compile` is green, `npm test` passes, and the extensi
 Extension Development Host showing two placeholder views. Recorded here because the rest of the plan
 assumes it and a reader should not have to infer what exists.
 
-- [x] 0.1 `package.json`: the `bartosz-warzocha` publisher, `repo-ledger`, engine `^1.104`, categories and keywords, `activationEvents: ["onStartupFinished"]`, the `repo-ledger` view container and the `repoLedger.repositories` and `repoLedger.history` view contributions
+- [x] 0.1 `package.json`: the `bartosz-warzocha` publisher, `multirepo-ledger`, engine `^1.104`, categories and keywords, `activationEvents: ["onStartupFinished"]`, the `multirepo-ledger` view container and the `multirepoLedger.repositories` and `multirepoLedger.history` view contributions
 - [x] 0.2 `capabilities.virtualWorkspaces: false` and `capabilities.untrustedWorkspaces: false` declared with the reason each gives, and the three commands `refresh`, `showOutput` and `openAdditionalRootsSetting` contributed with their view-title menus
 - [x] 0.3 The four settings declared with descriptions that say what each costs: `additionalRoots`, `exclude`, `maxDepth`, `forge.enabled`
 - [x] 0.4 TypeScript strict, ESM, `.ts` extensions in import specifiers, `tsconfig.json` targeting the extension host, `npm run check-types` as `tsc --noEmit`
@@ -48,24 +48,24 @@ assumes it and a reader should not have to infer what exists.
 - [x] 2.2 Write tests over a fixture tree: a root of twenty repositories returns twenty, and a run with `.git` left on the exclusion list returns none — the silent-empty failure this task exists to prevent
 - [x] 2.3 Implement the leaf rule: a found repository is not descended into, neither its `.git` nor its working tree, so the walk's cost is a function of the directories above the repositories
 - [x] 2.4 Write tests for the leaf rule: `node_modules/some-package/.git` and `vendor/other-project/.git` inside a discovered repository are not returned, and the walk visits no directory inside any repository it found
-- [x] 2.5 Implement the depth bound from `repoLedger.maxDepth`, logging the stop with the depth, the count of unsearched directories and the first of them
+- [x] 2.5 Implement the depth bound from `multirepoLedger.maxDepth`, logging the stop with the depth, the count of unsearched directories and the first of them
 - [x] 2.6 Implement link refusal from the `readdir` dirent plus a set of visited real paths, so a cycle terminates rather than merely being bounded, and resolve a user-named root with `realpath` because a path the user typed is a statement of intent
 - [x] 2.7 Implement the per-root directory budget, logging the count and the first unsearched directory, and returning what was found rather than failing
 - [x] 2.8 Write tests for the three guards: a junction pointing at its own ancestor terminates and does not report the depth stop, a depth stop logs its numbers, and a budget stop returns the repositories found before it
 - [x] 2.9 Implement `src/discovery/kind.ts`: resolve a `gitdir:` pointer written either absolute or relative, and classify ordinary, linked worktree (by `commondir`), submodule (by the `.git/modules/` path shape under an ancestor repository), separate git directory, and bare (by the `HEAD`/`config`/`objects`/`refs` layout)
 - [x] 2.10 Add the shallow marker to the classifier as one further `stat` of `<gitdir>/shallow`, kept beside the kind rather than inside it
 - [x] 2.11 Write tests for `kind.ts` against fixtures built in a scratch directory: a linked worktree, a submodule, a separate-git-dir repository carrying `core.worktree` classified ordinary, a bare layout, a shallow clone, and a `gitdir:` pointing nowhere
-- [x] 2.12 Implement `src/discovery/roots.ts`: workspace folders plus `repoLedger.additionalRoots`, deduplicated through `pathKey`, a configured path that does not exist logged once and skipped, and the built-in name exclusion never applied to a directory the user named
+- [x] 2.12 Implement `src/discovery/roots.ts`: workspace folders plus `multirepoLedger.additionalRoots`, deduplicated through `pathKey`, a configured path that does not exist logged once and skipped, and the built-in name exclusion never applied to a directory the user named
 - [x] 2.13 Write tests for `roots.ts`: a root outside the workspace, a missing path logged exactly once, one configured root containing another yielding each repository once, and a root named `build` still walked
 - [x] 2.14 Adapt `src/discovery/vscodeSearch.ts`: two passes, `**/.git/HEAD` and `**/.git`, each passing `null` as the exclude argument and capped with `maxResults`, with a reached cap reported rather than silently truncating the board
 - [x] 2.15 Write tests for the index adapter's pure half: a `.git/HEAD` hit yields the working-tree path, `.git/worktrees/*/HEAD` and `.git/modules/*/HEAD` yield nothing, and a hit under an excluded directory name is dropped
-- [x] 2.16 Implement the merge of index and walk results by resolved path, with the walk as the authority, and apply `repoLedger.exclude` so an excluded repository is not walked into, not read, not counted in any tally and not present in `M`
+- [x] 2.16 Implement the merge of index and walk results by resolved path, with the walk as the authority, and apply `multirepoLedger.exclude` so an excluded repository is not walked into, not read, not counted in any tally and not present in `M`
 - [x] 2.17 Write tests for the merge: a repository both sources found appears once, a bare repository comes only from the walk, and an excluded path is absent from the result and from the count
-- [x] 2.18 Implement the nested-candidate rule (D67) over the merged set: a candidate whose path lies inside the working tree of a repository the same generation has established is dropped, whichever source found it, unless the user named it or an ancestor of it inside that working tree in `repoLedger.additionalRoots`; evaluate it first among the index results, which arrive as one batch, and again when the walk completes
+- [x] 2.18 Implement the nested-candidate rule (D67) over the merged set: a candidate whose path lies inside the working tree of a repository the same generation has established is dropped, whichever source found it, unless the user named it or an ancestor of it inside that working tree in `multirepoLedger.additionalRoots`; evaluate it first among the index results, which arrive as one batch, and again when the walk completes
 - [x] 2.19 Write tests for the nested-candidate rule: an index hit for `<repo>/vendor/other-project/.git` is dropped, an index hit for `<repo>/sub/.git` is dropped, neither is ever emitted and then withdrawn, naming either path in `additionalRoots` restores it, and a linked worktree outside every working tree is untouched by the rule
-- [x] 2.20 Implement submodule rows read from the superproject's `.gitmodules` behind a new `repoLedger.includeSubmodules`, default `false`, with an uninitialised submodule getting no row at all, and confirm that these rows are admitted by their own setting rather than by the index and are therefore not removed by task 2.18
+- [x] 2.20 Implement submodule rows read from the superproject's `.gitmodules` behind a new `multirepoLedger.includeSubmodules`, default `false`, with an uninitialised submodule getting no row at all, and confirm that these rows are admitted by their own setting rather than by the index and are therefore not removed by task 2.18
 - [x] 2.21 Write tests for submodules: absent by default even when the index returns them, present with their marker when the setting is on, uninitialised yielding no row and no placeholder
-- [x] 2.22 Declare `repoLedger.includeSubmodules` in `package.json`, with a description saying what turning it on does to a board whose value is that it fits on one screen
+- [x] 2.22 Declare `multirepoLedger.includeSubmodules` in `package.json`, with a description saying what turning it on does to a board whose value is that it fits on one screen
 - [x] 2.23 Implement `src/discovery/cache.ts` and the pass contract: a generation and an `AbortSignal` per pass, the walk observing the signal between two directories, and a result arriving under a stale generation dropped at the boundary rather than merged
 - [x] 2.24 Write tests for cancellation: a superseded walk's partial result is discarded, a cancelled pass spawns no process, and disposal stops the walk
 - [x] 2.25 Write one end-to-end discovery test over a fixture tree holding an ordinary repository, a nested one, a linked worktree, a submodule, a bare repository, a shallow clone, an excluded path and a junction, asserting the exact set returned and that no git process was spawned
@@ -87,7 +87,7 @@ assumes it and a reader should not have to infer what exists.
 - [x] 3.11 Write tests for the environment: the spawn options asserted field by field, and a repository whose path holds a space, an ampersand and a quotation mark read correctly with no part of it interpreted
 - [x] 3.12 Implement `src/read/status.ts`: `git --no-optional-locks status --porcelain=v2 --branch` with the option **before** the subcommand, never spawned for a repository with no working tree, and the `# branch.oid` cross-check that discards an answer belonging to another commit
 - [x] 3.13 Write tests for the dirty read: the argument order (the wrong order exits 129), `# branch.oid (initial)` treated as a successful read, a mismatched object id discarded and the row re-read, and a bare repository never spawned for
-- [x] 3.14 Implement `src/read/schedule.ts`: concurrency from `os.availableParallelism()` clamped between a named floor and ceiling, replaced entirely by `repoLedger.concurrency` when it is above zero, with each bound's comment naming the failure it prevents
+- [x] 3.14 Implement `src/read/schedule.ts`: concurrency from `os.availableParallelism()` clamped between a named floor and ceiling, replaced entirely by `multirepoLedger.concurrency` when it is above zero, with each bound's comment naming the failure it prevents
 - [x] 3.15 Write tests for the scheduler: one reported CPU yields the floor rather than one, the setting overrides the derivation, no more than the limit is in flight at once, and the module contains no numeric literal that came from a measurement
 - [x] 3.16 Implement generations and cancellation in the read pass: the signal into `runGit` so the child is killed, and answers carrying a stale generation dropped rather than merged
 - [x] 3.17 Write tests for cancellation: a refresh mid-pass discards the previous pass's answers, and deactivation kills every child
@@ -97,8 +97,8 @@ assumes it and a reader should not have to infer what exists.
 - [x] 3.21 Write tests for `statesOf`: every state in the vocabulary, a repository carrying three at once, and no state outside the vocabulary reachable
 - [x] 3.22 Implement `src/model/relative.ts`: unix seconds to `just now`, `12m ago`, `3h ago`, `2d ago`, `5w ago`, `7mo ago`, `3y ago`, in English, with a future timestamp rendering `just now`
 - [x] 3.23 Write tests for the formatter at each boundary, for a future timestamp, and for the instant at which a given timestamp's wording next changes, which is what the page schedules against
-- [x] 3.24 Declare `repoLedger.dirtyState.enabled` (default `false`) and `repoLedger.concurrency` (default `0`, meaning derive) in `package.json`, each stating what it costs rather than what it tunes
-- [x] 3.25 Add a temporary `repoLedger.dumpBoard` command that runs discovery and the row read and writes one line per repository to the output channel, and run it in the Extension Development Host against a fixture directory — the first end-to-end proof, before anything is drawn. It is removed by task 4.21
+- [x] 3.24 Declare `multirepoLedger.dirtyState.enabled` (default `false`) and `multirepoLedger.concurrency` (default `0`, meaning derive) in `package.json`, each stating what it costs rather than what it tunes
+- [x] 3.25 Add a temporary `multirepoLedger.dumpBoard` command that runs discovery and the row read and writes one line per repository to the output channel, and run it in the Extension Development Host against a fixture directory — the first end-to-end proof, before anything is drawn. It is removed by task 4.21
 
 ## 4. The Repository List — the page and the row
 
@@ -111,7 +111,7 @@ assumes it and a reader should not have to infer what exists.
 - [x] 4.5 Write tests for text safety: a subject containing markup, a subject containing U+202E, and a subject containing a raw control character
 - [x] 4.6 Implement `src/view/listHtml.ts`: the page skeleton, the content security policy of `default-src 'none'` with nonced style and script and nothing else, `localResourceRoots: []`, colours from `--vscode-*` variables with fallbacks, and inline SVG painted with `currentColor`
 - [x] 4.7 Write tests for `listHtml`'s pure half: the exact policy string, carrying no `img-src`, no `font-src` and no `connect-src`; a fresh nonce per assignment appearing on the style and the script elements and nowhere else; and no colour literal outside a `--vscode-*` variable's final fallback
-- [x] 4.8 Implement `src/view/listView.ts` as the `WebviewViewProvider` for `repoLedger.repositories`, assigning the page **once per generation** — a fresh discovery, a sort change, a filter change, a theme reload — and never once per arriving answer
+- [x] 4.8 Implement `src/view/listView.ts` as the `WebviewViewProvider` for `multirepoLedger.repositories`, assigning the page **once per generation** — a fresh discovery, a sort change, a filter change, a theme reload — and never once per arriving answer
 - [ ] 4.9 Implement the per-row patch protocol on top of that: a tier-one answer as one patch addressed by `data-path`, a tier-two dirty answer as a smaller patch touching one span, and a re-order as a permutation applied in a single reinsertion pass
 - [ ] 4.10 Write tests for the patch protocol's pure half: one arriving answer produces one patch naming one path, a dirty answer produces a smaller patch touching one span, a re-order produces a permutation rather than a re-render, and nothing in the sequence produces a second page assignment
 - [x] 4.11 Implement the states that are not answers: `reading…` on a discovered row, the busy bar with `prefers-reduced-motion` honoured, the previous generation's rows kept dimmed beneath it, and the timed-out row with its command and Retry
@@ -119,12 +119,12 @@ assumes it and a reader should not have to infer what exists.
 - [x] 4.13 Write tests for the degenerate rows from a hand-built model: every entry in the capability's table renders its stated text, no row is blank, and no row renders a zero it did not establish
 - [x] 4.14 Implement the list's own empty states — nothing found, and nothing to scan — as page content whose controls post messages rather than navigate, and delete the two `viewsWelcome` blocks from `package.json`, which bind to a tree view the history pane is about to stop being
 - [x] 4.15 Write tests for the empty states' pure half: the exact sentence each state prints, the controls each offers, and that every control is a posted message rather than a `command:` URI, which the policy admits no navigation for
-- [x] 4.16 Implement `repoLedger.rowDensity` with `comfortable` and `compact`, the merged line that removes no field, and the view-title toggle that writes the setting so the choice survives a reload; declare the setting in `package.json`
+- [x] 4.16 Implement `multirepoLedger.rowDensity` with `comfortable` and `compact`, the merged line that removes no field, and the view-title toggle that writes the setting so the choice survives a reload; declare the setting in `package.json`
 - [x] 4.17 Write tests for density: compact merges lines 1 and 3, drops nothing, keeps the caption as the first field to yield, and never changes on its own with the repository count
 - [x] 4.18 Implement `src/controller.ts` as a constructed object with its dependencies passed in, owning the generation counter and the `AbortSignal`, and doing nothing on construction
 - [x] 4.19 Wire discovery into the list: every repository rendered in its pending state as discovery names it, before any git process has answered
 - [x] 4.20 Wire the row read into the list: reads scheduled at the derived concurrency, each answer patched into its own row, and a stale generation's answer dropped at the boundary
-- [x] 4.21 Replace the placeholder repositories provider in `src/extension.ts` with the controller, and remove the temporary `repoLedger.dumpBoard` command from task 3.25
+- [x] 4.21 Replace the placeholder repositories provider in `src/extension.ts` with the controller, and remove the temporary `multirepoLedger.dumpBoard` command from task 3.25
 - [ ] 4.22 Write tests for the controller's pure half — the order in which discovery and the read publish, and that a stale answer never reaches the board — and check by hand in the Extension Development Host that a fixture directory paints its rows from discovery and fills them in behind
 - [x] 4.23 Implement the activation contract in `extension.ts`: register, schedule `controller.start()` with `setTimeout(..., 0)`, return `void`, and assert in a test that no module in its import graph performs I/O at module scope
 - [x] 4.24 Implement the narrow-width yield order as a container query on the row, expressed in `ch` from the row's own content and the theme's own font, hiding the evidence age whole rather than truncating it
@@ -188,7 +188,7 @@ assumes it and a reader should not have to infer what exists.
 
 > **Built.** Landed as `src/read/{history,commitFiles}.ts` with adjacent tests. Unpushed commits come from a second `rev-list --not --remotes`, asked for only when the row already said there was something ahead.
 
-- [x] 7.1 Change `repoLedger.history` to `"type": "webview"` in `package.json`, confirming the two `viewsWelcome` blocks removed in task 4.14 have their replacements in the list's own empty states
+- [x] 7.1 Change `multirepoLedger.history` to `"type": "webview"` in `package.json`, confirming the two `viewsWelcome` blocks removed in task 4.14 have their replacements in the list's own empty states
 - [x] 7.2 Implement `src/history/log.ts`: the page command with every flag, the rev set of `HEAD` plus the upstream ref the row read already knows, `--max-count` and `--skip`, and the exact argument list written to the log as it was run
 - [x] 7.3 Write tests for the page command: the argument array asserted, `--no-optional-locks` before the subcommand, `--` last, the upstream ref omitted when there is none, and `--include-root-refs` never appearing here
 - [x] 7.4 Implement `src/history/parse.ts`: NUL-terminated records, `0x1F` fields, the bounded seven-way split with the subject taken verbatim to the end, and a record whose first field is not an object id of the repository's hash length discarded with a log line
@@ -209,19 +209,19 @@ assumes it and a reader should not have to infer what exists.
 
 - [x] 8.1 Extract the page skeleton, the content security policy and the keyboard contract into one module both webviews use, and confirm the list of phase 4 renders from it unchanged
 - [x] 8.2 Implement `src/view/historyHtml.ts` on that skeleton: the pane's regions — the banner area, the commit list, the expansion block and the end-of-list controls
-- [x] 8.3 Implement `src/view/historyView.ts` as the `WebviewViewProvider` for `repoLedger.history`, and replace the placeholder history provider in `src/extension.ts` with it
+- [x] 8.3 Implement `src/view/historyView.ts` as the `WebviewViewProvider` for `multirepoLedger.history`, and replace the placeholder history provider in `src/extension.ts` with it
 - [x] 8.4 Write tests for the shared skeleton's pure half: one policy string serving both panes, a fresh nonce per assignment, and the same keyboard map reported for both
 - [x] 8.5 Implement the commit row at a fixed height: the committer date, the subject, the ref chips, the unpushed marker carried by a glyph as well as a colour, and the author name as the field that yields first
 - [x] 8.6 Implement the chip strip's overflow: chips laid out in priority order, the ones that do not fit collapsed into one `+N` chip listed on hover and on focus, the HEAD chip never collapsing, and the subject never sacrificed for a chip
 - [x] 8.7 Write tests for the row's pure half: the field order, the yield order at decreasing widths, the chip overflow set, and that chips never wrap to a second line
 - [x] 8.8 Implement the caveat banners rendered above a non-empty list: mid-rebase naming the branch and the step, shallow, bare, the fetch-age statement, the retained-commit cap, and a truncated page
 - [x] 8.9 Write tests for the banner decisions from a hand-built model: two caveats visible at once, the rebase banner naming its target by short object id and never by a resolved branch name, and unreadable marker files dropping the banner silently
-- [x] 8.10 Implement paging: the first page derived from the pane's own geometry times an overscroll factor, clamped by a floor and a ceiling that are guards, smaller later pages, and `repoLedger.history.pageSize` overriding the derivation when above zero
+- [x] 8.10 Implement paging: the first page derived from the pane's own geometry times an overscroll factor, clamped by a floor and a ceiling that are guards, smaller later pages, and `multirepoLedger.history.pageSize` overriding the derivation when above zero
 - [x] 8.11 Write tests for the paging arithmetic: a pane collapsed to a sliver yields the floor, a pane dragged tall yields the ceiling, the setting overrides both, and no literal in the derivation came from a measurement
 - [x] 8.12 Implement the two ways to ask for more: the `IntersectionObserver` sentinel at the end of the list, and an explicit keyboard-reachable Load more control, which is not redundant because the observer does not fire in a collapsed pane
 - [x] 8.13 Implement the `--skip` hazard rule: keep the set of commit ids already shown, and reload from the first page rather than appending when a fetched page repeats one, discarding the carried unpushed-marking state with it
 - [x] 8.14 Write tests for the hazard rule: a page containing an already-shown id triggers a reload, no commit appears twice, and the reload does not carry the abandoned walk's marking state
-- [x] 8.15 Implement the retained-commit cap as `repoLedger.history.maxRetainedCommits`, a guard rather than a knob: on reaching it the pane states that it is showing the most recent commits and stops offering more, rather than silently ceasing to respond
+- [x] 8.15 Implement the retained-commit cap as `multirepoLedger.history.maxRetainedCommits`, a guard rather than a knob: on reaching it the pane states that it is showing the most recent commits and stops offering more, rather than silently ceasing to respond
 - [x] 8.16 Write tests for the cap at its boundary: the last page that fits below the cap appends, the page that would cross it is not requested, the pane states the cap and withdraws the Load more control, and the pane still answers every other interaction
 - [x] 8.17 Implement the expansion in the page: at most one commit expanded at a time, the reading state inside the expanded block, and the caption saying once per list that clicking opens the file as it is now
 - [x] 8.18 Implement the four exact file-row renderings — a rename as one row, a binary file as `binary`, a mode-only change as `mode 100644 → 100755`, and an empty commit stated as changing no files — plus the `+N more` bound counted from records parsed
@@ -240,7 +240,7 @@ assumes it and a reader should not have to infer what exists.
 - [ ] 8.31 Write tests for the visibility rules' pure half — hide and reveal yields no read, a window reload yields one, a board refresh yields none — and check by hand that the scroll offset survives each of the three
 - [x] 8.32 Implement the retry affordance on a failed page or expansion, since a stated failure with no way to ask again leaves the pane dead until the selection is changed and changed back
 - [x] 8.33 Write tests for the retry state machine: a failed page becomes a stated failure carrying its command, retry returns it to a reading state, and a retry that fails again does not clear the commits already on screen
-- [x] 8.34 Declare `repoLedger.history.pageSize` and `repoLedger.history.maxRetainedCommits` in `package.json`, each described as a guard against an unbounded read rather than as a speed control
+- [x] 8.34 Declare `multirepoLedger.history.pageSize` and `multirepoLedger.history.maxRetainedCommits` in `package.json`, each described as a guard against an unbounded read rather than as a speed control
 - [ ] 8.35 Check by hand in the Extension Development Host against the phase 7 fixture repository: select, page to the end, expand a commit, choose a merge's other parent, open a file, and switch repositories while a page is still in flight
 
 ## 9. The Forge Layer — and it is off when it lands
@@ -269,7 +269,7 @@ assumes it and a reader should not have to infer what exists.
 - [x] 9.20 Write tests for the review position's four renderings, the single unpluralised form settled once in `model/row.ts`, and the header sentence counting the repositories that could not be asked
 - [ ] 9.21 Verify against a live host whether `gh search prs --owner` accepts several owners in one invocation, which is currently unverified, and record the answer in `design.md` beside D56 rather than assuming either way
 - [ ] 9.22 Verify the `glab` flag spelling and output shape against a real `glab` and a real GitLab, and correct `forge/gitlab.ts` from what it says; until that is done the adapter fails to silence, which is the ship-safe state and not a substitute for the check
-- [x] 9.23 Confirm after the layer lands that `repoLedger.forge.enabled` still defaults to `false`, that a default installation spawns neither CLI and writes no forge command to the log, and that no setting for a token, an account or an API base URL exists anywhere in the manifest
+- [x] 9.23 Confirm after the layer lands that `multirepoLedger.forge.enabled` still defaults to `false`, that a default installation spawns neither CLI and writes no forge command to the log, and that no setting for a token, an account or an API base URL exists anywhere in the manifest
 
 ## 10. Packaging and Release
 
@@ -297,6 +297,6 @@ assumes it and a reader should not have to infer what exists.
 - [ ] 10.5 Confirm the eslint `no-restricted-imports` rule keeps `vscode` out of every module except `extension.ts`, `controller.ts`, `view/` and `discovery/vscodeSearch.ts`, and that `npm test` loads every pure module without an extension host
 - [ ] 10.6 Read a full session's log with the forge layer off and then on, and confirm the closed subcommand set — `--version`, `for-each-ref`, `config --get`, `status`, `log`, `diff-tree`, and `log -1` on an old git — and the three outbound paths, with no `fetch`, no `ls-remote` and no `cat-file`
 - [ ] 10.7 Run the empty and unreadable states by hand in the Extension Development Host: no workspace folder and no additional root, a root holding no repository, no `git` on `PATH`, a repository git refuses for dubious ownership, and a repository on an unreachable mount
-- [ ] 10.8 Run the unusual-repository states by hand in the Extension Development Host: a repository with no commits, a bare repository, a mid-rebase repository, a linked worktree, an initialised submodule beneath an open folder with `repoLedger.includeSubmodules` off, and a directory of repositories in a window with no folder open
+- [ ] 10.8 Run the unusual-repository states by hand in the Extension Development Host: a repository with no commits, a bare repository, a mid-rebase repository, a linked worktree, an initialised submodule beneath an open folder with `multirepoLedger.includeSubmodules` off, and a directory of repositories in a window with no folder open
 - [ ] 10.9 Package with `npx @vscode/vsce package` and install the resulting file into a clean VS Code profile, checking that the extension does not activate in Restricted Mode and contributes nothing in a virtual workspace
 - [ ] 10.10 Archive this change and promote its six spec deltas into `openspec/specs/`, recording in `design.md` every "Open against design" item the implementation settled and how

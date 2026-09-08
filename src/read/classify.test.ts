@@ -89,7 +89,7 @@ before(async () => {
   // hard-coded directory would make the tests a fact about one disk. `realpath`
   // because macOS hands out `/var/...` for a directory git will report back as
   // `/private/var/...`, which would fail every path comparison below.
-  root = normalizePath(await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'repo-ledger-'))));
+  root = normalizePath(await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'multirepo-ledger-'))));
 
   // The fixtures git will not make on request: a pointer to a directory that is
   // gone, a `.git` file that is not one, an empty `.git` directory, and a
@@ -121,7 +121,7 @@ before(async () => {
   const configPath = path.join(root, 'gitconfig');
   await fs.writeFile(
     configPath,
-    '[user]\n\tname = Repo Ledger Test\n\temail = test@example.invalid\n' +
+    '[user]\n\tname = Multirepo Ledger Test\n\temail = test@example.invalid\n' +
       '[init]\n\tdefaultBranch = main\n[protocol "file"]\n\tallow = always\n',
     'utf8',
   );

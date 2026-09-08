@@ -35,8 +35,8 @@ export class ReportPanel {
     const panel =
       ReportPanel.current ??
       vscode.window.createWebviewPanel(
-        'repoLedger.report',
-        'Repo Ledger — activity',
+        'multirepoLedger.report',
+        'Multirepo Ledger — activity',
         vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One,
         { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true },
       );
@@ -55,7 +55,7 @@ export class ReportPanel {
       });
     }
 
-    panel.title = `Repo Ledger — ${report.periodLabel}`;
+    panel.title = `Multirepo Ledger — ${report.periodLabel}`;
     panel.webview.html = renderReportHtml(report, createNonce());
     panel.reveal(panel.viewColumn, false);
   }
@@ -203,7 +203,13 @@ export function renderReportHtml(report: ActivityReport, nonce: string): string 
         report.authors
           .map(
             (row) =>
-              `<tr><td>${escapeHtml(row.author)}</td>` +
+              `<tr><td>${escapeHtml(row.author)}` +
+                // The address, because the row is keyed on it: without it two
+                // colleagues who share a display name are two identical rows,
+                // and a reader cannot tell which of them did what.
+                `${row.email.length > 0 ? `<span class="who">${escapeHtml(row.email)}</span>` : ''}` +
+                `${row.aliases.length > 0 ? `<span class="who">also ${escapeHtml(row.aliases.join(', '))}</span>` : ''}` +
+                `</td>` +
               `<td class="num">${row.commits}</td>` +
               `<td class="num">${row.merges}</td>` +
               `<td class="num">${row.repositories}</td>` +
@@ -250,7 +256,7 @@ export function renderReportHtml(report: ActivityReport, nonce: string): string 
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Repo Ledger activity</title>
+<title>Multirepo Ledger activity</title>
 <style nonce="${nonce}">${STYLES}</style>
 </head>
 <body>
@@ -330,6 +336,10 @@ table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
 th, td { padding: 4px 12px 4px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.25)); }
 th { font-weight: 600; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The address under the name, and any other spellings under that: secondary
+   lines rather than extra columns, because they are how the reader checks an
+   identity, not something they scan down. */
+td .who { display: block; font-size: 0.9em; color: var(--vscode-descriptionForeground); }
 tbody tr:hover { background: var(--vscode-list-hoverBackground); }
 td.time, td.sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 td.repo { white-space: nowrap; font-weight: 600; }

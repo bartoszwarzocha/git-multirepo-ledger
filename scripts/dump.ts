@@ -95,7 +95,7 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
-// Review counts, which are what `repoLedger.forge.enabled` switches on
+// Review counts, which are what `multirepoLedger.forge.enabled` switches on
 // ---------------------------------------------------------------------------
 
 if (process.argv.includes('--forge')) {

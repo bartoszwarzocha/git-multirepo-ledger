@@ -1,4 +1,4 @@
-# Repo Ledger — brief for the session that builds this
+# Multirepo Ledger — brief for the session that builds this
 
 Read this first, then `openspec/project.md` and `openspec/config.yaml`. Between them they are the
 whole brief. Nothing else needs to be reconstructed.
@@ -21,7 +21,7 @@ selection.
 
 | Decision | Detail |
 |---|---|
-| **Name and location** | `repo-ledger`, display name **Repo Ledger**, at `E:\AI\repo-ledger`. The user chose this over `git-repo-radar` and `multi-repo-monitor`. |
+| **Name and location** | `multirepo-ledger`, display name **Git Multirepo Ledger** on the Marketplace and **Multirepo Ledger** everywhere inside the editor - the command palette repeats the category on every entry, and the listing is the only place the word `Git` earns its length. The working copy stays at `E:\AI\repo-ledger`; the directory name is not the product name and renaming it would buy nothing. **Renamed on 2026-09-08** from `repo-ledger` / **Repo Ledger**, which the user judged to name nothing a reader searches for - every git extension is about repositories, and `multirepo` is the word for the unit this one actually works on. Originally chosen over `git-repo-radar` and `multi-repo-monitor`. |
 | **MR/PR source** | The `gh` and `glab` CLIs when present and authenticated, with a local-only fallback (unmerged branches, ahead/behind) when they are not. **Off by default** — it touches the network. Chosen over local-only, over `git ls-remote`, and over an API token. |
 | **Layout** | Two views in one Activity Bar container: a webview list on top, the history pane below. This is the pattern the sibling project already proves. |
 | **Code sharing** | Copy from the sibling project. **No monorepo.** Two Marketplace extensions with a shared package is a publishing coupling neither needs. |

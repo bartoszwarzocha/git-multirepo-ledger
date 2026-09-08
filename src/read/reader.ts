@@ -23,7 +23,7 @@
  * extension that walks the working tree. Its cost is proportional to the number
  * of tracked and untracked files rather than to the number of repositories, so
  * on a large checkout or a network share it is the read that would make a board
- * feel slow. It is therefore opt-in (`repoLedger.dirty.enabled`) and it runs
+ * feel slow. It is therefore opt-in (`multirepoLedger.dirty.enabled`) and it runs
  * only for the rows the caller asks about - in practice, the ones on screen.
  *
  * The two costs are orthogonal: `for-each-ref` scales with ref count and
@@ -103,7 +103,7 @@ export const CONCURRENCY_CEILING = 16;
 /**
  * The most reads in flight when the user chooses the number themselves.
  *
- * `repoLedger.concurrency` overrides the derivation entirely, because the person
+ * `multirepoLedger.concurrency` overrides the derivation entirely, because the person
  * with the network share is better placed to know what it can take than any
  * derivation is. This cap is not a second opinion about their machine: it is the
  * point past which a setting stops being a preference and becomes a fork bomb
@@ -125,7 +125,7 @@ export const CONCURRENCY_MAX = 64;
 export const DEFAULT_ROW_TIMEOUT_MS = 10_000;
 
 export interface ConcurrencyInput {
-  /** `repoLedger.concurrency`. Zero, absent or nonsense means "derive it". */
+  /** `multirepoLedger.concurrency`. Zero, absent or nonsense means "derive it". */
   readonly configured?: number;
   /** What the runtime reports. Injected by tests; otherwise read from `os`. */
   readonly cpuCount?: number;
@@ -149,7 +149,7 @@ export function deriveConcurrency(input: ConcurrencyInput = {}): number {
     const chosen = Math.min(Math.floor(configured), CONCURRENCY_MAX);
     if (chosen < Math.floor(configured)) {
       log.warn(
-        `repoLedger.concurrency is ${configured}; ${CONCURRENCY_MAX} reads at once is the most this extension will hold open, so that is what it will use`,
+        `multirepoLedger.concurrency is ${configured}; ${CONCURRENCY_MAX} reads at once is the most this extension will hold open, so that is what it will use`,
       );
     }
     return chosen;
@@ -267,7 +267,7 @@ export interface RowPassOptions {
    */
   readonly onRow: (row: RepositoryRow) => void;
   readonly signal?: AbortSignal;
-  /** `repoLedger.concurrency`. Zero or absent derives it. */
+  /** `multirepoLedger.concurrency`. Zero or absent derives it. */
   readonly concurrency?: number;
   /** Test seam for the derivation; otherwise the runtime is asked. */
   readonly cpuCount?: number;

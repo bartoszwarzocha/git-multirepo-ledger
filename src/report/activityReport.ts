@@ -17,7 +17,13 @@
 
 import type { ActivityEntry, ActivityFailure } from '../read/activity.ts';
 import { relativeAge } from '../view/row.ts';
-import { PERIOD_LABELS, groupByDay, timeOf, type ActivityPeriod } from '../view/activity.ts';
+import {
+  PERIOD_LABELS,
+  authorIdOf,
+  groupByDay,
+  timeOf,
+  type ActivityPeriod,
+} from '../view/activity.ts';
 
 /** One bar of the commits-per-day chart. */
 export interface ReportBar {
@@ -37,7 +43,15 @@ export interface ReportRepositoryRow {
 }
 
 export interface ReportAuthorRow {
+  /** The name this person used for most of these commits. */
   readonly author: string;
+  /**
+   * The address the row is keyed on, so two people who happen to share a
+   * display name are still tellable apart. Empty when the commits carried none.
+   */
+  readonly email: string;
+  /** Other names the same address committed under, if any. */
+  readonly aliases: readonly string[];
   readonly commits: number;
   readonly merges: number;
   readonly repositories: number;
@@ -107,7 +121,10 @@ interface RepositoryTotals {
 }
 
 interface AuthorTotals {
-  author: string;
+  id: string;
+  /** Most-used name first. */
+  names: string[];
+  email: string;
   commits: number;
   merges: number;
   repositories: Set<string>;
@@ -138,14 +155,14 @@ export function byRepository(entries: readonly ActivityEntry[]): RepositoryTotal
     if (existing) {
       existing.commits += 1;
       existing.merges += merge ? 1 : 0;
-      existing.authors.add(entry.commit.author);
+      existing.authors.add(authorIdOf(entry.commit));
       existing.latest = Math.max(existing.latest, entry.commit.committedAt);
     } else {
       totals.set(entry.repositoryPath, {
         label: entry.label,
         commits: 1,
         merges: merge ? 1 : 0,
-        authors: new Set([entry.commit.author]),
+        authors: new Set([authorIdOf(entry.commit)]),
         latest: entry.commit.committedAt,
       });
     }
@@ -157,29 +174,64 @@ export function byRepository(entries: readonly ActivityEntry[]): RepositoryTotal
   );
 }
 
+/**
+ * Totals per person, not per spelling.
+ *
+ * Keyed on the identity `authorIdOf` decides, so one person committing as
+ * `Ada Lovelace` from one machine and `ada.lovelace` from another is one row
+ * with one total. Keyed on the display name - which is what this did - the same
+ * person appeared twice, each row understating their work, and the "Authors"
+ * count above the table was simply wrong.
+ */
 export function byAuthor(entries: readonly ActivityEntry[]): AuthorTotals[] {
   const totals = new Map<string, AuthorTotals>();
+  const names = new Map<string, Map<string, number>>();
+
   for (const entry of entries) {
+    const id = authorIdOf(entry.commit);
     const merge = entry.commit.parents.length > 1;
-    const existing = totals.get(entry.commit.author);
+    const existing = totals.get(id);
     if (existing) {
       existing.commits += 1;
       existing.merges += merge ? 1 : 0;
       existing.repositories.add(entry.repositoryPath);
       existing.latest = Math.max(existing.latest, entry.commit.committedAt);
     } else {
-      totals.set(entry.commit.author, {
-        author: entry.commit.author,
+      totals.set(id, {
+        id,
+        names: [],
+        email: entry.commit.authorEmail.trim(),
         commits: 1,
         merges: merge ? 1 : 0,
         repositories: new Set([entry.repositoryPath]),
         latest: entry.commit.committedAt,
       });
+      names.set(id, new Map());
+    }
+    const seen = names.get(id);
+    if (seen) {
+      seen.set(entry.commit.author, (seen.get(entry.commit.author) ?? 0) + 1);
     }
   }
+
+  for (const total of totals.values()) {
+    total.names = [...(names.get(total.id) ?? new Map<string, number>()).entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  }
+
   return [...totals.values()].sort(
-    (a, b) => b.commits - a.commits || a.author.localeCompare(b.author),
+    (a, b) => b.commits - a.commits || displayName(a).localeCompare(displayName(b)),
   );
+}
+
+/** What to call a person in a table: their most-used name, else their address. */
+export function displayName(total: AuthorTotals): string {
+  const first = total.names[0];
+  if (first !== undefined && first.length > 0) {
+    return first;
+  }
+  return total.email.length > 0 ? total.email : total.id;
 }
 
 /**
@@ -195,10 +247,13 @@ export function renderActivityReport(input: ReportInput): string {
   const authors = byAuthor(entries);
   const days = groupByDay(entries, now);
   const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
+  // Every commit line names the person, not whichever spelling that particular
+  // commit carried, so the list agrees with the table above it.
+  const labels = new Map(authors.map((author) => [author.id, displayName(author)]));
 
   const lines: string[] = [];
 
-  lines.push(`# Repo Ledger — activity ${windowPhrase(period)}`);
+  lines.push(`# Multirepo Ledger — activity ${windowPhrase(period)}`);
   lines.push('');
 
   if (entries.length === 0) {
@@ -254,12 +309,17 @@ export function renderActivityReport(input: ReportInput): string {
   lines.push('');
   lines.push('## Who did it');
   lines.push('');
-  lines.push('| Author | Commits | Merges | Repositories | Last commit |');
-  lines.push('|---|--:|--:|--:|---|');
+  // The address gets its own column rather than being folded into the name: it
+  // is what the row is keyed on, and without it two colleagues who share a
+  // display name are two identical-looking rows.
+  lines.push('| Author | Email | Commits | Merges | Repositories | Last commit |');
+  lines.push('|---|---|--:|--:|--:|---|');
   for (const author of authors) {
+    const also =
+      author.names.length > 1 ? ` _(also ${author.names.slice(1).map(cell).join(', ')})_` : '';
     lines.push(
-      `| ${cell(author.author)} | ${author.commits} | ${author.merges} | ` +
-        `${author.repositories.size} | ${relativeAge(author.latest, now)} |`,
+      `| ${cell(displayName(author))}${also} | ${cell(author.email)} | ${author.commits} | ` +
+        `${author.merges} | ${author.repositories.size} | ${relativeAge(author.latest, now)} |`,
     );
   }
 
@@ -270,7 +330,7 @@ export function renderActivityReport(input: ReportInput): string {
   lines.push('|---|--:|--:|--:|');
   for (const day of days) {
     const repos = new Set(day.entries.map((entry) => entry.repositoryPath)).size;
-    const people = new Set(day.entries.map((entry) => entry.commit.author)).size;
+    const people = new Set(day.entries.map((entry) => authorIdOf(entry.commit))).size;
     lines.push(`| ${cell(day.heading)} | ${day.entries.length} | ${repos} | ${people} |`);
   }
 
@@ -284,7 +344,7 @@ export function renderActivityReport(input: ReportInput): string {
       const merge = entry.commit.parents.length > 1 ? ' _(merge)_' : '';
       lines.push(
         `- \`${timeOf(entry.commit.committedAt)}\` **${cell(entry.label)}** — ` +
-          `${cell(entry.commit.subject)}${merge} · ${cell(entry.commit.author)} · ` +
+          `${cell(entry.commit.subject)}${merge} · ${cell(labels.get(authorIdOf(entry.commit)) ?? entry.commit.author)} · ` +
           `\`${entry.commit.shortSha}\``,
       );
     }
@@ -307,6 +367,7 @@ export function buildActivityReport(input: ReportInput): ActivityReport {
   const authors = byAuthor(entries);
   const days = groupByDay(entries, now);
   const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
+  const labels = new Map(authors.map((author) => [author.id, displayName(author)]));
 
   const summary =
     entries.length === 0
@@ -337,7 +398,9 @@ export function buildActivityReport(input: ReportInput): ActivityReport {
       last: relativeAge(repository.latest, now),
     })),
     authors: authors.map((author) => ({
-      author: author.author,
+      author: displayName(author),
+      email: author.email,
+      aliases: author.names.slice(1),
       commits: author.commits,
       merges: author.merges,
       repositories: author.repositories.size,
@@ -349,7 +412,7 @@ export function buildActivityReport(input: ReportInput): ActivityReport {
         time: timeOf(entry.commit.committedAt),
         label: entry.label,
         subject: entry.commit.subject,
-        author: entry.commit.author,
+        author: labels.get(authorIdOf(entry.commit)) ?? entry.commit.author,
         shortSha: entry.commit.shortSha,
         merge: entry.commit.parents.length > 1,
       })),

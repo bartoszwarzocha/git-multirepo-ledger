@@ -15,6 +15,7 @@ function commit(over: Partial<Commit> = {}): Commit {
     refs: [],
     committedAt: SECONDS - 7200,
     author: 'Ada',
+    authorEmail: 'ada@example.com',
     subject: 'Fix the walk',
     unpushed: false,
     ...over,

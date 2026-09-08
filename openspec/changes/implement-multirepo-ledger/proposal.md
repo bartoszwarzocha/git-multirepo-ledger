@@ -1,11 +1,11 @@
 ## Why
 
-Repo Ledger puts **the last commit's subject and date on every repository row, and sorts the list
+Multirepo Ledger puts **the last commit's subject and date on every repository row, and sorts the list
 by it**. That combination exists nowhere else: it is absent from VS Code's Source Control row, from
 its tooltip and from its children, and from GitLens's repository node — all three carry the branch
 and the upstream ahead/behind, none carries what landed last or when. Nor does anything sort by it:
 core offers discovery time, name or path; GitLens offers discovered, last-fetched or name. Alongside
-that, Repo Ledger reads repositories **nested deeper than one level below an open folder, or in
+that, Multirepo Ledger reads repositories **nested deeper than one level below an open folder, or in
 directories the editor has never opened at all** — the two cases core's `git.repositoryScanMaxDepth`
 default of `1` leaves out, and for which `git.scanRepositories` explicitly refuses an absolute path.
 Everything else on the row supports those two things.
@@ -42,7 +42,7 @@ it.** Nothing below leans on a demand argument, because there is not one to lean
 ## What Changes
 
 - **Discover repositories by walking for `.git`** beneath every open workspace folder and every
-  absolute path in `repoLedger.additionalRoots`, with the editor's own file index as an accelerator
+  absolute path in `multirepoLedger.additionalRoots`, with the editor's own file index as an accelerator
   and the walk as the authority. Finding a `.git` ends the walk of that subtree, so the cost is a
   function of the directories above the repositories rather than of what is inside them.
 - **Classify what kind of repository each one is from the filesystem**, before spawning anything:
@@ -131,7 +131,7 @@ _(None — this is the first change in a new project.)_
   costs one process per page and one per commit expansion, in a single slot outside the row-read
   pool. `git --version` is one process per session. `design.md` carries the whole table, and every
   concurrency figure is derived from `os.availableParallelism()` between a named floor and ceiling or
-  is the `repoLedger.concurrency` setting — no number measured on a development machine appears as a
+  is the `multirepoLedger.concurrency` setting — no number measured on a development machine appears as a
   constant, a threshold or an argument anywhere in this change.
 - **Cancellation.** Every discovery-and-read pass carries a generation and an `AbortSignal`; a
   refresh, a workspace-folder change, a relevant settings change or disposal aborts it, kills the
@@ -168,15 +168,15 @@ _(None — this is the first change in a new project.)_
 - **Virtual workspaces.** `virtualWorkspaces.supported: false`, already in the manifest. There is no
   local path to spawn a process in, no `.git` to stat and no `.git/config` to parse.
 - **Manifest changes required by this design.** Two kinds, and the second is longer than it looks.
-  **The view type:** `repoLedger.history` is currently declared without a `type`, which makes it a
+  **The view type:** `multirepoLedger.history` is currently declared without a `type`, which makes it a
   tree. It becomes `"type": "webview"`, because the pane must render caveats above a *non-empty*
   list — a mid-rebase banner, a truncated page, a paging cap — and `viewsWelcome` renders only when a
   tree is empty. The two existing `viewsWelcome` blocks describe states of the list rather than of
   the history and move into the list's own empty states. **The settings:** `package.json` declares
   four (`additionalRoots`, `exclude`, `maxDepth`, `forge.enabled`) and this design introduces six
-  more — `repoLedger.includeSubmodules` (D9), `repoLedger.dirtyState.enabled` (D14),
-  `repoLedger.concurrency` (D15), `repoLedger.rowDensity` (D28), `repoLedger.history.pageSize` (D48)
-  and `repoLedger.history.maxRetainedCommits` (D48). Each is declared where the phase that needs it
+  more — `multirepoLedger.includeSubmodules` (D9), `multirepoLedger.dirtyState.enabled` (D14),
+  `multirepoLedger.concurrency` (D15), `multirepoLedger.rowDensity` (D28), `multirepoLedger.history.pageSize` (D48)
+  and `multirepoLedger.history.maxRetainedCommits` (D48). Each is declared where the phase that needs it
   lands, and each description says what the setting costs, or which failure it guards against, rather
   than what it tunes.
 - **File watching.** Two non-recursive watchers per repository, on the git directory and on its

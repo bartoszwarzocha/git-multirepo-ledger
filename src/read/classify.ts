@@ -339,7 +339,7 @@ async function isShallow(commonDir: string): Promise<boolean> {
  * apart, and it is what a reader recognises: `services/billing` says where the
  * thing is, where `billing` on its own could be any of three. The folder's own
  * name reads better than an empty string when a repository sits at the top of
- * it, and a repository from `repoLedger.additionalRoots` has no folder to be
+ * it, and a repository from `multirepoLedger.additionalRoots` has no folder to be
  * relative to, so it is named after its own directory.
  *
  * Forward slashes even on Windows, matching the sibling extension: the label is

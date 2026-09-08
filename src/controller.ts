@@ -20,6 +20,7 @@ import type { DiscoveryInput } from './discovery/repositories.ts';
 import { createWorkspaceSearcher } from './discovery/vscodeSearch.ts';
 import { pathKey } from './model/keys.ts';
 import type {
+  ActivityAuthor,
   ActivityView,
   Commit,
   CommitFile,
@@ -36,10 +37,13 @@ import type {
 } from './model/types.ts';
 import { readDirtyState, readRows } from './read/reader.ts';
 import { readActivity, type ActivityEntry, type ActivityFailure } from './read/activity.ts';
+import { fetchRepositories, fetchSentence } from './read/fetch.ts';
 import { buildActivityReport, renderActivityReport } from './report/activityReport.ts';
 import { ReportPanel } from './view/reportPanel.ts';
 import {
   ACTIVITY_PERIODS,
+  authorLabels,
+  authorOf,
   authorsOf,
   failureSentence,
   filterActivity,
@@ -52,7 +56,8 @@ import {
 import { resetCliCache } from './forge/cli.ts';
 import { readReviewCounts, targetKey } from './forge/counts.ts';
 import { forgeKindOf, parseForgeTarget, type ForgeTarget } from './forge/remote.ts';
-import { filterRows, sortRows, tallyOf } from './view/order.ts';
+import { BADGE_MODES, DEFAULT_BADGE_MODE, badgeFor, type BadgeMode } from './view/badge.ts';
+import { filterRows, isUnreadable, sortRows, tallyOf } from './view/order.ts';
 import { HistoryViewProvider, type HistoryRequest } from './view/historyPanel.ts';
 import { ListViewProvider, type PanelRequest } from './view/listPanel.ts';
 import { BLOB_SCHEME, BlobFileSystemProvider, blobUri } from './git/blobFileSystem.ts';
@@ -60,9 +65,9 @@ import { readCommitFiles } from './read/commitFiles.ts';
 import { DEFAULT_PAGE_SIZE, readHistory, readUnpushed } from './read/history.ts';
 import { log } from './util/log.ts';
 
-const SORT_KEY = 'repoLedger.sort';
-const FILTER_KEY = 'repoLedger.filter';
-const STATE_CONTEXT = 'repoLedger.state';
+const SORT_KEY = 'multirepoLedger.sort';
+const FILTER_KEY = 'multirepoLedger.filter';
+const STATE_CONTEXT = 'multirepoLedger.state';
 
 /**
  * A burst of watcher events becomes one pass.
@@ -112,7 +117,18 @@ export class LedgerController implements vscode.Disposable {
   private activityFailures = '';
   private activityFailureList: ActivityFailure[] = [];
   private activityMergesOnly = false;
-  private activityAuthor: string | undefined;
+  /**
+   * The person the digest is narrowed to, held whole rather than as a key.
+   *
+   * Whole, because the picker has to keep offering them after the reader
+   * narrows the period past their last commit: an option that vanishes takes
+   * the filter with it and widens the list behind the reader's back. Holding
+   * the record means the label survives even when the current answer no longer
+   * contains a single commit of theirs.
+   */
+  private activityAuthor: ActivityAuthor | undefined;
+  /** A fetch is in flight; a second one must not start behind it. */
+  private fetching = false;
   private activityAbort: AbortController | undefined;
   private activityGeneration = 0;
   private generation = 0;
@@ -363,14 +379,20 @@ export class LedgerController implements vscode.Disposable {
       sort: this.sort,
       filter: this.filter,
       busy,
+      fetchEnabled: this.config.get<boolean>('fetch.enabled', false),
       generation: this.generation,
       ...(this.selectedPath === undefined ? {} : { selectedPath: this.selectedPath }),
       period: this.activityPeriod,
       mergesOnly: this.activityMergesOnly,
-      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
-      authors: authorsOf(this.activityEntries),
+      ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
+      authors: this.offeredAuthors(),
     };
     this.list.setModel(model);
+    // From the whole board rather than the filtered slice: the badge is what
+    // the reader sees while this panel is closed, and a number that moved
+    // because of a filter set inside the panel would be unreadable from
+    // outside it.
+    this.list.setBadge(badgeFor(model.tally, this.badgeMode()));
   }
 
   // -------------------------------------------------------------------------
@@ -408,15 +430,16 @@ export class LedgerController implements vscode.Disposable {
         if (request.mergesOnly !== undefined) {
           this.activityMergesOnly = request.mergesOnly;
         }
-        if (request.author !== undefined) {
-          this.activityAuthor = request.author.length > 0 ? request.author : undefined;
+        if (request.authorId !== undefined) {
+          this.activityAuthor =
+            request.authorId.length > 0 ? this.authorFor(request.authorId) : undefined;
         }
         this.publishActivity(false);
         return;
       case 'settings':
         await vscode.commands.executeCommand(
           'workbench.action.openSettings',
-          'repoLedger.additionalRoots',
+          'multirepoLedger.additionalRoots',
         );
         return;
       case 'select':
@@ -476,6 +499,13 @@ export class LedgerController implements vscode.Disposable {
       case 'open-terminal':
         vscode.window.createTerminal({ cwd: uri, name: path.basename(target) }).show();
         return;
+      case 'fetch': {
+        const row = this.rows.find((entry) => pathKey(entry.repository.path) === pathKey(target));
+        if (row) {
+          await this.fetch([row]);
+        }
+        return;
+      }
       case 'copy-path':
         await vscode.env.clipboard.writeText(target);
         void vscode.window.showInformationMessage(`Copied ${target}`);
@@ -718,7 +748,7 @@ export class LedgerController implements vscode.Disposable {
       await vscode.commands.executeCommand('vscode.changes', title, changes);
     } catch (error) {
       log.error('could not open the commit diff', error);
-      void vscode.window.showErrorMessage(`Repo Ledger could not open the diff for ${short}.`);
+      void vscode.window.showErrorMessage(`Multirepo Ledger could not open the diff for ${short}.`);
     }
   }
 
@@ -752,7 +782,7 @@ export class LedgerController implements vscode.Disposable {
       );
     } catch (error) {
       log.error('could not open the diff', error);
-      void vscode.window.showErrorMessage(`Repo Ledger could not open ${filePath} at ${short}.`);
+      void vscode.window.showErrorMessage(`Multirepo Ledger could not open ${filePath} at ${short}.`);
     }
   }
 
@@ -797,7 +827,7 @@ export class LedgerController implements vscode.Disposable {
   /**
    * Fill in open merge and pull request counts, batched by owner.
    *
-   * Runs only when `repoLedger.forge.enabled` is on, and only over repositories
+   * Runs only when `multirepoLedger.forge.enabled` is on, and only over repositories
    * whose remote points at a host this version has a client for. A repository
    * the queries did not cover keeps `review` absent, which the row renders as
    * silence - never as a zero, because "nobody asked" and "nothing is open" are
@@ -876,14 +906,14 @@ export class LedgerController implements vscode.Disposable {
     const repositories = this.cache.current ?? [];
     if (repositories.length === 0) {
       void vscode.window.showInformationMessage(
-        'Repo Ledger has not found any repositories to report on yet.',
+        'Multirepo Ledger has not found any repositories to report on yet.',
       );
       return;
     }
 
     const period = this.activityPeriod;
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'Repo Ledger: reading every repository' },
+      { location: vscode.ProgressLocation.Window, title: 'Multirepo Ledger: reading every repository' },
       async () => {
         const result = await readActivity({
           repositories,
@@ -896,7 +926,7 @@ export class LedgerController implements vscode.Disposable {
         const input = {
           entries: filterActivity(result.entries, {
             mergesOnly: this.activityMergesOnly,
-            ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+            ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
           }),
           failures: result.failures,
           period,
@@ -964,6 +994,34 @@ export class LedgerController implements vscode.Disposable {
   }
 
   /**
+   * Everyone the picker offers.
+   *
+   * Drawn from the whole answer rather than the scoped one, so choosing a
+   * repository does not empty the control that chooses a person, and the
+   * currently chosen person is appended when the answer no longer holds any of
+   * their commits - with a zero on them, because a count nobody established and
+   * a count of none are different facts and this one is established.
+   */
+  private offeredAuthors(): ActivityAuthor[] {
+    const authors = authorsOf(this.activityEntries);
+    const chosen = this.activityAuthor;
+    if (chosen !== undefined && !authors.some((author) => author.id === chosen.id)) {
+      return [...authors, { ...chosen, commits: 0 }];
+    }
+    return authors;
+  }
+
+  /** The person behind an identity key the page sent back. */
+  private authorFor(id: string): ActivityAuthor {
+    const known = this.offeredAuthors().find((author) => author.id === id);
+    // An id with nobody behind it can only come from a page that outlived the
+    // answer it was drawn from. It still filters correctly - the key is what
+    // filtering compares - so it is kept rather than dropped, labelled with the
+    // address itself rather than with a name this extension would be inventing.
+    return known ?? { id, label: id, email: id.startsWith('name:') ? '' : id, names: [], commits: 0 };
+  }
+
+  /**
    * The pane's list, in whichever scope it is in.
    *
    * One read and one filter path for both scopes. `Selected` used to be a
@@ -983,9 +1041,11 @@ export class LedgerController implements vscode.Disposable {
 
     const filtered = filterActivity(scoped, {
       mergesOnly: this.activityMergesOnly,
-      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+      ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
     });
     const summary = summarise(filtered, this.activityPeriod);
+    const authors = this.offeredAuthors();
+    const labels = authorLabels(authors);
 
     const activity: ActivityView = {
       period: this.activityPeriod,
@@ -1001,16 +1061,14 @@ export class LedgerController implements vscode.Disposable {
           sha: entry.commit.sha,
           shortSha: entry.commit.shortSha,
           time: timeOf(entry.commit.committedAt),
-          author: entry.commit.author,
+          ...authorOf(entry, labels),
           subject: entry.commit.subject,
           merge: entry.commit.parents.length > 1,
         })),
       })),
-      // Offered from the whole answer rather than the scoped one, so choosing a
-      // repository does not empty the control that chooses a person.
-      authors: authorsOf(this.activityEntries),
+      authors,
       mergesOnly: this.activityMergesOnly,
-      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+      ...(this.activityAuthor === undefined ? {} : { authorId: this.activityAuthor.id }),
     };
 
     // The board's author list comes from the same read.
@@ -1044,7 +1102,7 @@ export class LedgerController implements vscode.Disposable {
     if (files.failure) {
       log.error(`could not list the files of ${sha}: ${files.failure.stderr}`);
       void vscode.window.showErrorMessage(
-        `Repo Ledger could not read ${sha.slice(0, 7)} in ${repositoryPath}.`,
+        `Multirepo Ledger could not read ${sha.slice(0, 7)} in ${repositoryPath}.`,
       );
       return;
     }
@@ -1071,7 +1129,7 @@ export class LedgerController implements vscode.Disposable {
   // -------------------------------------------------------------------------
 
   private get config(): vscode.WorkspaceConfiguration {
-    return vscode.workspace.getConfiguration('repoLedger');
+    return vscode.workspace.getConfiguration('multirepoLedger');
   }
 
   private get sort(): SortMode {
@@ -1093,6 +1151,123 @@ export class LedgerController implements vscode.Disposable {
   private hasSomethingToSearch(): boolean {
     const folders = vscode.workspace.workspaceFolders ?? [];
     return folders.length > 0 || this.config.get<string[]>('additionalRoots', []).length > 0;
+  }
+
+  /**
+   * Fetch, in the repositories the reader asked about.
+   *
+   * The only thing in this extension that writes inside a repository, and it is
+   * gated three ways: the setting is off until somebody turns it on, the button
+   * is not drawn while it is off, and this refuses even if a command reaches it
+   * some other way. A network call is not something a status board starts on
+   * its own.
+   *
+   * Nothing is merged, rebased, pushed or pruned - see `read/fetch.ts` for why
+   * a bulk button may not do those. What this changes is the freshness of the
+   * evidence: after it, the ahead/behind figures on the board are measured
+   * against remote-tracking refs that are current rather than against whatever
+   * the last fetch left behind, which is why it ends in a read.
+   */
+  private async fetch(rows: readonly RepositoryRow[]): Promise<void> {
+    if (!this.config.get<boolean>('fetch.enabled', false)) {
+      const turnOn = 'Open settings';
+      const answer = await vscode.window.showInformationMessage(
+        'Fetching is off. Everything else the Ledger does is a local read, so the one thing that reaches the network ships disabled.',
+        turnOn,
+      );
+      if (answer === turnOn) {
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          'multirepoLedger.fetch.enabled',
+        );
+      }
+      return;
+    }
+
+    if (this.fetching) {
+      // A second press while one is running would double the connections to
+      // the same servers, which is the opposite of what the concurrency
+      // setting is there to control.
+      void vscode.window.showInformationMessage('A fetch is already running.');
+      return;
+    }
+
+    const targets = rows.map((row) => row.repository);
+    if (targets.length === 0) {
+      return;
+    }
+
+    // How many at once is a question about somebody else's server, which this
+    // machine cannot measure and this extension cannot see. So it is a setting,
+    // and its default is deliberately timid.
+    const concurrency = Math.max(1, this.config.get<number>('fetch.concurrency', 4));
+    const remotes = new Map(
+      rows.map((row) => [pathKey(row.repository.path), row.remoteUrl !== undefined]),
+    );
+
+    this.fetching = true;
+    try {
+      const report = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title:
+            targets.length === 1
+              ? `Multirepo Ledger: fetching ${targets[0]?.label ?? ''}`
+              : `Multirepo Ledger: fetching ${targets.length} repositories`,
+          cancellable: true,
+        },
+        async (progress, token) => {
+          const controller = new AbortController();
+          token.onCancellationRequested(() => controller.abort());
+          let settled = 0;
+          return fetchRepositories({
+            repositories: targets,
+            hasRemote: (path) => remotes.get(pathKey(path)) === true,
+            concurrency,
+            signal: controller.signal,
+            onSettled: (label) => {
+              settled += 1;
+              progress.report({ message: `${settled} of ${targets.length} · ${label}` });
+            },
+          });
+        },
+      );
+
+      // Every failure keeps git's own words and the command that produced them,
+      // in the log, where they can be read in full and retyped. The notification
+      // carries the count; the evidence is never squeezed into a toast.
+      for (const failure of report.failures) {
+        log.warn(`fetch failed in ${failure.label}: ${failure.command} -> ${failure.stderr}`);
+      }
+      log.info(fetchSentence(report));
+
+      if (report.failures.length > 0) {
+        const show = 'Show Log';
+        const answer = await vscode.window.showWarningMessage(fetchSentence(report), show);
+        if (answer === show) {
+          await vscode.commands.executeCommand('multirepoLedger.showOutput');
+        }
+      } else {
+        void vscode.window.setStatusBarMessage(`Multirepo Ledger: ${fetchSentence(report)}`, 6000);
+      }
+    } finally {
+      this.fetching = false;
+    }
+
+    // The figures the fetch just made answerable are still the old ones until
+    // something reads them again.
+    this.schedulePass();
+  }
+
+  /** What the badge counts, as configured. */
+  private badgeMode(): BadgeMode {
+    const configured = this.config.get<string>('badge', DEFAULT_BADGE_MODE);
+    // A value this version does not know can only come from a settings file
+    // written by another one. It falls back rather than throwing, because a
+    // typo in a setting must not cost the reader the whole board.
+    return (BADGE_MODES as readonly string[]).includes(configured)
+      ? (configured as BadgeMode)
+      : DEFAULT_BADGE_MODE;
   }
 
   private discoveryInput(signal: AbortSignal): DiscoveryInput {
@@ -1142,20 +1317,28 @@ export class LedgerController implements vscode.Disposable {
 
   private registerCommands(): void {
     this.disposables.push(
-      vscode.commands.registerCommand('repoLedger.refresh', () => {
+      vscode.commands.registerCommand('multirepoLedger.refresh', () => {
         // Signing in to `gh` while the window is open should take effect on the
         // next Refresh rather than on the next reload, and whether a tool is
         // signed in is remembered for the session.
         resetCliCache();
         return this.refresh({ rediscover: true });
       }),
-      vscode.commands.registerCommand('repoLedger.activityReport', () =>
+      vscode.commands.registerCommand('multirepoLedger.activityReport', () =>
         this.openActivityReport(),
       ),
-      vscode.commands.registerCommand('repoLedger.openAdditionalRootsSetting', () =>
+      vscode.commands.registerCommand('multirepoLedger.fetchAll', () =>
+        // A repository git already refused to answer for is left out of the
+        // bulk fetch: it would refuse this too, for the same reason, and the
+        // row is already saying so in git's own words. Aiming the row's own
+        // button at one is still honoured - that is somebody asking on
+        // purpose.
+        this.fetch(this.rows.filter((row) => !isUnreadable(row))),
+      ),
+      vscode.commands.registerCommand('multirepoLedger.openAdditionalRootsSetting', () =>
         vscode.commands.executeCommand(
           'workbench.action.openSettings',
-          'repoLedger.additionalRoots',
+          'multirepoLedger.additionalRoots',
         ),
       ),
     );
@@ -1168,17 +1351,25 @@ export class LedgerController implements vscode.Disposable {
         // Only the settings that change what is discovered force a new walk;
         // the rest are picked up by the next publish.
         if (
-          event.affectsConfiguration('repoLedger.additionalRoots') ||
-          event.affectsConfiguration('repoLedger.exclude') ||
-          event.affectsConfiguration('repoLedger.maxDepth')
+          event.affectsConfiguration('multirepoLedger.additionalRoots') ||
+          event.affectsConfiguration('multirepoLedger.exclude') ||
+          event.affectsConfiguration('multirepoLedger.maxDepth')
         ) {
           this.schedulePass(true);
         } else if (
-          event.affectsConfiguration('repoLedger.dirty.enabled') ||
-          event.affectsConfiguration('repoLedger.concurrency') ||
-          event.affectsConfiguration('repoLedger.forge.enabled')
+          event.affectsConfiguration('multirepoLedger.dirty.enabled') ||
+          event.affectsConfiguration('multirepoLedger.concurrency') ||
+          event.affectsConfiguration('multirepoLedger.forge.enabled')
         ) {
           this.schedulePass();
+        } else if (
+          event.affectsConfiguration('multirepoLedger.badge') ||
+          event.affectsConfiguration('multirepoLedger.fetch.enabled')
+        ) {
+          // Nothing has to be read again - the tally the badge counts is
+          // already in hand - but something does have to be published, or the
+          // icon keeps counting what the reader just stopped asking for.
+          this.publish(this.passRunning);
         }
       }),
     );

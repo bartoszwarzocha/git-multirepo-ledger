@@ -18,7 +18,7 @@ keyboard), D55 (the forge layer is an overlay), D63 (activation), D65 (every out
 ### Requirement: The pane SHALL show the history of the selected repository and of nothing else
 
 The system SHALL render commit history for exactly the repository selected in the
-`repoLedger.repositories` list, SHALL name that repository in the pane, and SHALL NOT select a
+`multirepoLedger.repositories` list, SHALL name that repository in the pane, and SHALL NOT select a
 repository on its own initiative.
 
 A selection restored from a previous window is a selection, not a read: the read behind it fires
@@ -560,18 +560,18 @@ change the read, the record layout or the parser.
 
 The system SHALL derive the first page size from the number of fixed-height rows that fit the pane
 and an overscroll factor, SHALL clamp that value between a floor and a ceiling, and SHALL use
-`repoLedger.history.pageSize` instead when it is set above zero.
+`multirepoLedger.history.pageSize` instead when it is set above zero.
 
 The floor and the ceiling are guards: the floor stops a pane collapsed to a sliver from spawning a
 process to fetch two commits, and the ceiling stops a pane dragged to the height of an unknown
 display from asking for a page nobody chose.
 
 #### Scenario: The setting overrides the derivation
-- **WHEN** `repoLedger.history.pageSize` is set to a value above zero
+- **WHEN** `multirepoLedger.history.pageSize` is set to a value above zero
 - **THEN** that value SHALL be the page size
 
 #### Scenario: Zero means derive from the pane
-- **WHEN** `repoLedger.history.pageSize` is `0`
+- **WHEN** `multirepoLedger.history.pageSize` is `0`
 - **THEN** the page size SHALL be derived from the pane's own geometry
 
 #### Scenario: A pane collapsed to a sliver
@@ -814,7 +814,7 @@ slowly or not at all, and SHALL render the same history whether or not the forge
 - **THEN** the pane SHALL render exactly as it does when they are present
 
 #### Scenario: The forge layer is off, or on but unauthenticated
-- **WHEN** `repoLedger.forge.enabled` is `false`, or is `true` against a host no forge tool is
+- **WHEN** `multirepoLedger.forge.enabled` is `false`, or is `true` against a host no forge tool is
   authenticated for
 - **THEN** the rendered history SHALL be identical in both cases
 - **AND** no forge failure SHALL change any fact the pane states about commits
@@ -823,13 +823,13 @@ slowly or not at all, and SHALL render the same history whether or not the forge
 
 ### Requirement: The pane SHALL be a webview whose caveats render above a non-empty list
 
-The system SHALL contribute `repoLedger.history` as a webview view, SHALL attach no `viewsWelcome`
+The system SHALL contribute `multirepoLedger.history` as a webview view, SHALL attach no `viewsWelcome`
 block to it, and SHALL render its caveats as part of the page rather than as a tooltip, a view
 description or a row in the list.
 
 #### Scenario: The manifest declares the pane a webview
 - **WHEN** `package.json` is read
-- **THEN** the `repoLedger.history` view SHALL declare `"type": "webview"`
+- **THEN** the `multirepoLedger.history` view SHALL declare `"type": "webview"`
 - **AND** no `viewsWelcome` entry SHALL name that view
 
 #### Scenario: Two caveats at once, above rows
@@ -906,6 +906,6 @@ The only git subcommands this capability runs are `log` and `diff-tree`, both pr
   affordance. Written here as one, because a stated failure with no way to ask again leaves the pane
   dead until the selection is changed and changed back.
 - **Neither paging setting is in the manifest yet.** D48 names both —
-  `repoLedger.history.pageSize` and `repoLedger.history.maxRetainedCommits` — and `package.json`
+  `multirepoLedger.history.pageSize` and `multirepoLedger.history.maxRetainedCommits` — and `package.json`
   contributes neither. They are referred to here by their function as well as their id, and the
   manifest work belongs in `tasks.md`, which schedules it in the phase that needs them.

@@ -546,6 +546,14 @@ export interface ListModel {
   /** A pass is running behind the rows shown. */
   readonly busy: boolean;
   /**
+   * The fetch button is offered on each row.
+   *
+   * Carried on the model rather than read from settings by the page, so a
+   * button that reaches the network can never be drawn by a view that has not
+   * been told it may.
+   */
+  readonly fetchEnabled: boolean;
+  /**
    * The period every commit question is asked over: the pane's list and the
    * report both. On the board because it is a lens over everything, not a
    * setting of one panel.
@@ -553,10 +561,16 @@ export interface ListModel {
   readonly period: string;
   /** Only merges, in the pane and in the report alike. */
   readonly mergesOnly: boolean;
-  /** One author, or absent for everybody. */
-  readonly author?: string;
-  /** Every author the current answer contains, for the control that picks one. */
-  readonly authors: readonly string[];
+  /** One person's identity key, or absent for everybody. */
+  readonly authorId?: string;
+  /**
+   * Every person the current answer contains, for the control that picks one.
+   *
+   * A chosen person who has nothing in the current range is still in this list,
+   * carried by the controller: narrowing the period must not silently drop the
+   * filter and widen the result behind the reader's back.
+   */
+  readonly authors: readonly ActivityAuthor[];
   /**
    * The row the reader last clicked, by working-tree path.
    *
@@ -604,6 +618,17 @@ export interface Commit {
   /** Committer date, whole seconds since the epoch. */
   readonly committedAt: number;
   readonly author: string;
+  /**
+   * The address git recorded for the author, exactly as written.
+   *
+   * Read because the display name is not an identity: `user.name` is per
+   * checkout, so one person arrives as `Bartosz Warzocha` from one machine and
+   * `bartosz.warzocha` from another. Normalising happens where identities are
+   * compared, not here, so the commit keeps saying what it actually says.
+   *
+   * Empty when the commit carried none, which git permits.
+   */
+  readonly authorEmail: string;
   readonly subject: string;
   /**
    * This commit exists on no remote this repository knows about.
@@ -681,6 +706,31 @@ export interface HistoryModel {
   readonly busy: boolean;
 }
 
+/**
+ * One person, and every name their git configs have recorded for them.
+ *
+ * Identity is the address, not the display name. A picker keyed on `%an`
+ * offered the same person once per spelling and, worse, hid the rest of their
+ * work behind whichever spelling was picked - which is what this one did.
+ *
+ * Addresses are folded together, names are never folded: two addresses whose
+ * names merely look alike would be two people merged into one, with nothing on
+ * screen to say it had happened. An address is evidence; a resemblance is a
+ * guess.
+ */
+export interface ActivityAuthor {
+  /** The address lowercased, or the fallback `authorIdOf` describes. */
+  readonly id: string;
+  /** What to show: the name used for most of these commits. */
+  readonly label: string;
+  /** The address as git wrote it. Empty when the commits carried none. */
+  readonly email: string;
+  /** Every distinct name seen under this address, most used first. */
+  readonly names: readonly string[];
+  /** How many commits in the current answer are theirs. */
+  readonly commits: number;
+}
+
 /** The cross-repository digest, already grouped and counted. */
 export interface ActivityView {
   /** `today`, `week`, `month` - the vocabulary lives in `view/activity.ts`. */
@@ -695,11 +745,11 @@ export interface ActivityView {
    */
   readonly unreadable?: string;
   readonly days: readonly ActivityDayView[];
-  /** Every author present, for the filter. */
-  readonly authors: readonly string[];
+  /** Every person present, for the filter. */
+  readonly authors: readonly ActivityAuthor[];
   readonly mergesOnly: boolean;
-  /** Absent means every author. */
-  readonly author?: string;
+  /** Absent means everybody. */
+  readonly authorId?: string;
 }
 
 export interface ActivityDayView {
@@ -714,7 +764,17 @@ export interface ActivityEntryView {
   readonly shortSha: string;
   /** `14:32`, in the reader's own timezone. */
   readonly time: string;
+  /** The person's display name - the one the picker offers, not necessarily
+   * the string on this commit. */
   readonly author: string;
+  /**
+   * What git actually recorded here, present only when it differs from
+   * `author`.
+   *
+   * The row reads consistently with the picker above it, and the commit's own
+   * words are still one hover away rather than overwritten.
+   */
+  readonly recordedAs?: string;
   readonly subject: string;
   readonly merge: boolean;
 }
@@ -735,13 +795,24 @@ export type ListMessage =
   | { readonly type: 'action'; readonly action: RowAction; readonly path: string }
   | { readonly type: 'refresh' };
 
-/** The hand-offs a row offers. Every one of them opens something else; none writes. */
+/**
+ * What a row offers.
+ *
+ * All but one of these open something else and write nothing. The exception is
+ * `fetch`, which is the single thing this extension does that writes inside a
+ * repository - remote-tracking refs, `FETCH_HEAD` and objects, never the
+ * working tree, a branch or a commit. It is here because the divergence figures
+ * on the row are measured against remote-tracking refs, so without it the board
+ * reports the state of the last fetch and calls it the state of the repository.
+ * It ships off; see `multirepoLedger.fetch.enabled`.
+ */
 export type RowAction =
   | 'open-window'
   | 'add-to-workspace'
   | 'reveal-in-scm'
   | 'open-terminal'
-  | 'copy-path';
+  | 'copy-path'
+  | 'fetch';
 
 export const ROW_ACTIONS: readonly RowAction[] = [
   'open-window',
@@ -749,4 +820,5 @@ export const ROW_ACTIONS: readonly RowAction[] = [
   'reveal-in-scm',
   'open-terminal',
   'copy-path',
+  'fetch',
 ];

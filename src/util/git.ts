@@ -51,6 +51,16 @@ export interface GitOptions {
   /** Default 32 MiB. Output past this is truncated, not buffered without bound. */
   maxBytes?: number;
   signal?: AbortSignal;
+  /**
+   * The complete environment for the child, replacing the one it would inherit.
+   *
+   * Only the fetch uses this, and it uses it to take things away: git must not
+   * be able to ask for a password, because a spawned process has no terminal to
+   * ask on and the question would never be answered. Every read leaves this
+   * unset and inherits the host'''s environment, which is what makes a command
+   * shown on screen the same command a user could retype.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -102,6 +112,7 @@ export function runGitBuffer(
       child = spawn('git', [...args], {
         cwd: options.cwd,
         windowsHide: true,
+        ...(options.env ? { env: options.env } : {}),
         // No shell: arguments carry user-controlled paths and task text.
         shell: false,
       });

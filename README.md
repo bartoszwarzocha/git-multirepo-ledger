@@ -1,4 +1,4 @@
-# Repo Ledger
+# Multirepo Ledger
 
 **Every other repository list tells you where each repository *is*. This one tells you when it last
 moved — and sorts by it.**
@@ -15,8 +15,16 @@ directory you have not opened — is invisible to both. This walks for `.git` at
 the open folders and beneath directories you name.
 
 That is the whole of what this does. It is a status board, not a git client: no staging, no
-committing, no pushing, no fetching, no conflict resolution. Everything it runs is a read, and it
-never writes inside a repository it found.
+committing, no pushing, no merging, no rebasing, no conflict resolution. **Nothing it runs can
+change your working tree, your branches, or any commit you have made.**
+
+One thing it runs is not a read: `git fetch`, offered per row and for the whole board, and
+**disabled until you turn it on**. It writes remote-tracking refs, `FETCH_HEAD` and objects — and
+nothing else, which is why it is the only write here. It exists because ahead and behind are
+measured against remote-tracking refs: those are exactly as old as your last fetch, so without it a
+row can read *in sync* having asked its server nothing for a month. It never merges, pushes or
+prunes. When a repository wants credentials the fetch fails immediately rather than waiting on a
+prompt that cannot be answered, and you are shown git's own words and the exact command.
 
 > **This is early.** See [Status](#status) at the bottom before you expect any of it to work.
 
@@ -70,17 +78,17 @@ against one side and misleading against the other.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `repoLedger.additionalRoots` | `[]` | Absolute directory paths scanned for repositories in addition to the open folders. This is the normal way to use the extension: the directory your repositories live in is usually not the one you have open. |
-| `repoLedger.exclude` | `[]` | Absolute paths of repositories to leave out entirely — a mirror, a vendored checkout, anything you keep but never work in. |
-| `repoLedger.maxDepth` | `32` | How deep below each root the search for `.git` descends. A stop against a symlink cycle or a home directory, not a way to make the scan cheaper. |
-| `repoLedger.dirty.enabled` | `true` | Show which repositories hold uncommitted work. The one read that walks the working tree, so it costs a second `git` process per repository on screen. While off, the row says nothing there rather than showing a zero. |
-| `repoLedger.concurrency` | `0` | How many repositories are read at once. `0` derives it from what the machine says it can run in parallel. |
-| `repoLedger.history.pageSize` | `50` | Commits per page in the history pane. |
-| `repoLedger.forge.enabled` | `false` | Open merge and pull request counts, via the `gh` and `glab` CLIs. **Off by default: it reaches the network.** While off, neither tool is invoked. |
+| `multirepoLedger.additionalRoots` | `[]` | Absolute directory paths scanned for repositories in addition to the open folders. This is the normal way to use the extension: the directory your repositories live in is usually not the one you have open. |
+| `multirepoLedger.exclude` | `[]` | Absolute paths of repositories to leave out entirely — a mirror, a vendored checkout, anything you keep but never work in. |
+| `multirepoLedger.maxDepth` | `32` | How deep below each root the search for `.git` descends. A stop against a symlink cycle or a home directory, not a way to make the scan cheaper. |
+| `multirepoLedger.dirty.enabled` | `true` | Show which repositories hold uncommitted work. The one read that walks the working tree, so it costs a second `git` process per repository on screen. While off, the row says nothing there rather than showing a zero. |
+| `multirepoLedger.concurrency` | `0` | How many repositories are read at once. `0` derives it from what the machine says it can run in parallel. |
+| `multirepoLedger.history.pageSize` | `50` | Commits per page in the history pane. |
+| `multirepoLedger.forge.enabled` | `false` | Open merge and pull request counts, via the `gh` and `glab` CLIs. **Off by default: it reaches the network.** While off, neither tool is invoked. |
 
 ## Privacy
 
-Everything except `repoLedger.forge.enabled` is a local read of your own repositories. With the
+Everything except `multirepoLedger.forge.enabled` is a local read of your own repositories. With the
 forge setting on, `gh` and `glab` are run as subprocesses and talk to whatever hosts your
 repositories point at, using credentials those tools already hold; no token is ever asked for or
 stored, and there is no telemetry and no account. With it off, nothing leaves the machine.
@@ -103,7 +111,7 @@ the check.
 
 What does not exist: merge lanes in the history pane, a text filter over the board, and three of
 the five row hand-offs. All are recorded as deferred, with their reasons, in
-`openspec/changes/implement-repo-ledger/`. Nobody has yet run the empty and unusual states by hand
+`openspec/changes/implement-multirepo-ledger/`. Nobody has yet run the empty and unusual states by hand
 in the Extension Development Host, which is the largest thing standing between this and a release.
 
 No screenshots, benchmarks or install counts appear above because none of them exist yet, and none

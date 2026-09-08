@@ -35,7 +35,7 @@ No further process SHALL be spawned to establish any of those facts.
 - **AND** no second process SHALL be spawned to obtain any of those fields
 
 #### Scenario: A board of forty repositories
-- **WHEN** forty repositories are discovered and `repoLedger.dirtyState.enabled` is `false`
+- **WHEN** forty repositories are discovered and `multirepoLedger.dirtyState.enabled` is `false`
 - **THEN** a full refresh SHALL spawn forty `git` processes for the rows
 - **AND** one further `git --version` process for the session, not one per repository
 
@@ -390,7 +390,7 @@ The dirty read is `git --no-optional-locks status --porcelain=v2 --branch`. The 
 `--no-optional-locks` **before** the subcommand: written after it, git exits 129 with
 ``unknown option `no-optional-locks'`` and every dirty read fails.
 
-It SHALL run only while `repoLedger.dirtyState.enabled` is `true`, only for repositories currently
+It SHALL run only while `multirepoLedger.dirtyState.enabled` is `true`, only for repositories currently
 visible in the list, and never for a repository with no working tree. It SHALL NOT pass
 `--show-stash`, and it SHALL leave the untracked mode at its default, so an untracked directory is
 reported once rather than per file.
@@ -406,7 +406,7 @@ the same window — and never as a count.
   not read as "clean"
 
 #### Scenario: The read is enabled
-- **WHEN** `repoLedger.dirtyState.enabled` is set to `true`
+- **WHEN** `multirepoLedger.dirtyState.enabled` is set to `true`
 - **THEN** each visible repository SHALL be read with
   `git --no-optional-locks status --porcelain=v2 --branch`
 - **AND** the option SHALL precede `status` in the argument list
@@ -446,7 +446,7 @@ SHALL produce a stated row, not a disappearance and not a blank; output beyond t
 reported as truncated rather than read as a complete answer.
 
 The number of repository reads in flight SHALL be derived from `os.availableParallelism()`, clamped
-between a floor and a ceiling, and SHALL be replaced entirely by `repoLedger.concurrency` when that
+between a floor and a ceiling, and SHALL be replaced entirely by `multirepoLedger.concurrency` when that
 setting is greater than zero. No fixed concurrency measured on any machine SHALL be used.
 
 #### Scenario: A repository on an unreachable mount
@@ -466,7 +466,7 @@ setting is greater than zero. No fixed concurrency measured on any machine SHALL
 - **AND** a hundred repositories SHALL NOT be read one at a time
 
 #### Scenario: The user overrides concurrency
-- **WHEN** `repoLedger.concurrency` is set to `4`
+- **WHEN** `multirepoLedger.concurrency` is set to `4`
 - **THEN** no more than four repository reads SHALL be in flight at once
 
 ---
@@ -631,7 +631,7 @@ connects to a network.
 - **AND** no repository SHALL gain a `FETCH_HEAD` it did not have
 
 #### Scenario: Nothing leaves the machine
-- **WHEN** the row read runs with `repoLedger.forge.enabled` at its default of `false`
+- **WHEN** the row read runs with `multirepoLedger.forge.enabled` at its default of `false`
 - **THEN** no network request SHALL be made by the extension
 - **AND** no subcommand outside the closed set SHALL be spawned
 
@@ -645,6 +645,6 @@ connects to a network.
   the row read. What to do with a genuinely malformed record is undecided; the reading that matches
   D20 is that the repository joins the `unreadable` set rather than rendering a shifted field.
 - **Two settings this capability depends on are not yet in the manifest.** D14 names
-  `repoLedger.dirtyState.enabled` and D15 names `repoLedger.concurrency`; `package.json` declares
+  `multirepoLedger.dirtyState.enabled` and D15 names `multirepoLedger.concurrency`; `package.json` declares
   neither. Both need a declaration, with a description stating what the setting costs, before this
   capability can be implemented as specified.

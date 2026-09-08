@@ -316,12 +316,12 @@ function labRoot(): string {
   if (root === undefined) {
     // `realpathSync` because the temporary directory is a symlink on macOS and a
     // short path on Windows, and git reports the resolved one.
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'repo-ledger-reader-')));
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'multirepo-ledger-reader-')));
     const global = path.join(root, 'gitconfig');
     const system = path.join(root, 'gitconfig-system');
     fs.writeFileSync(
       global,
-      '[user]\n\tname = Repo Ledger Test\n\temail = test@example.invalid\n' +
+      '[user]\n\tname = Multirepo Ledger Test\n\temail = test@example.invalid\n' +
         '[init]\n\tdefaultBranch = main\n' +
         '[commit]\n\tgpgsign = false\n' +
         '[core]\n\tautocrlf = false\n',

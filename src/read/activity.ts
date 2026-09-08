@@ -64,7 +64,10 @@ export interface ActivityRequest {
   readonly timeoutMs?: number;
 }
 
-const FORMAT = ['%H', '%P', '%D', '%ct', '%an', '%s'].join('%x1f') + '%x1e';
+// Kept identical to `HISTORY_FORMAT`, because `parseHistory` reads both. They
+// are two constants rather than one import so that changing the digest's fields
+// cannot silently change the pane's, but a test asserts they agree.
+export const FORMAT = ['%H', '%P', '%D', '%ct', '%an', '%ae', '%s'].join('%x1f') + '%x1e';
 
 export function activityArgs(since: string): string[] {
   // An empty bound is not `--since=`: git accepts that and reads it as an

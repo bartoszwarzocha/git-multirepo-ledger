@@ -272,7 +272,7 @@ test('naming the enclosing repository does not resurrect what is inside it', asy
 });
 
 // ---------------------------------------------------------------------------
-// repoLedger.exclude
+// multirepoLedger.exclude
 // ---------------------------------------------------------------------------
 
 test('an excluded repository is absent', async () => {
@@ -376,7 +376,7 @@ test('a tilde is expanded before the path is looked for on disk', async () => {
   // because the one thing this must prove is that the expansion happens before
   // the directory is looked for - and proving it by creating a directory would
   // mean writing into the user's home directory to test a string operation.
-  const relative = `repo-ledger-nothing-here-${process.pid}`;
+  const relative = `multirepo-ledger-nothing-here-${process.pid}`;
   const reported: string[] = [];
 
   const found = await discover({
