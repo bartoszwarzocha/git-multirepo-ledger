@@ -34,7 +34,11 @@ export type PanelRequest =
   | { readonly type: 'action'; readonly action: RowAction; readonly path: string }
   | { readonly type: 'refresh' }
   /** The empty states offer the one setting that fills them; nothing else does. */
-  | { readonly type: 'settings' };
+  | { readonly type: 'settings' }
+  /** The period every commit question is asked over. */
+  | { readonly type: 'period'; readonly period: string }
+  /** Narrow the commits, in the pane and the report alike. */
+  | { readonly type: 'commitFilter'; readonly mergesOnly?: boolean; readonly author?: string };
 
 export class ListViewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = 'repoLedger.repositories';
@@ -53,6 +57,9 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
     filter: 'all',
     busy: true,
     generation: 0,
+    period: 'week',
+    mergesOnly: false,
+    authors: [],
   };
 
   readonly onDidRequest: vscode.Event<PanelRequest> = this.requested.event;
@@ -137,6 +144,20 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
         if (isMember(FILTER_MODES, payload['filter'])) {
           this.requested.fire({ type: 'filter', filter: payload['filter'] });
         }
+        return;
+      case 'period':
+        if (typeof payload['period'] === 'string') {
+          this.requested.fire({ type: 'period', period: payload['period'] });
+        }
+        return;
+      case 'commitFilter':
+        this.requested.fire({
+          type: 'commitFilter',
+          ...(typeof payload['mergesOnly'] === 'boolean'
+            ? { mergesOnly: payload['mergesOnly'] }
+            : {}),
+          ...(typeof payload['author'] === 'string' ? { author: payload['author'] } : {}),
+        });
         return;
       case 'action':
         if (isMember(ROW_ACTIONS, payload['action']) && typeof payload['path'] === 'string') {
@@ -304,6 +325,77 @@ const CHIPS: readonly Chip[] = [
   },
 ];
 
+
+/**
+ * The lens: the period, and who and what counts inside it.
+ *
+ * On the board rather than on the pane below, because it governs both the
+ * pane's list and the report in the editor. It was on the pane, and a reader
+ * changing the period there found that the report followed it - a control at
+ * the bottom silently deciding what a command at the top produced, which is
+ * the wrong way round and impossible to guess.
+ */
+/**
+ * Three ranges, and no `All` among them.
+ *
+ * A range can be turned off, so the fourth button was saying the same thing as
+ * none of the other three being on - two controls for one state, and the reader
+ * had to work out that pressing `All` and un-pressing `7 days` were the same
+ * gesture. Pressing the lit one clears it, and nothing lit means no date bound.
+ */
+const PERIODS: ReadonlyArray<[string, string, string]> = [
+  ['today', 'Today', 'Only commits from midnight - press again to drop the limit'],
+  ['week', '7 days', 'Only the last seven days - press again to drop the limit'],
+  ['month', '30 days', 'Only the last thirty days - press again to drop the limit'],
+];
+
+function renderLens(model: ListModel): string {
+  const periods = PERIODS.map(([value, label, title]) => {
+    const on = model.period === value;
+    // The lit button sends `all`, which is this extension's word for no bound.
+    // The same click both narrows and widens, so there is one control per range
+    // rather than one per range plus one to undo them.
+    return (
+      `<button type="button" class="period${on ? ' on' : ''}"` +
+      ` data-period="${on ? 'all' : escapeHtml(value)}"` +
+      ` title="${escapeHtml(on ? 'Showing this range - press to drop the limit' : title)}"` +
+      ` aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(label)}</button>`
+    );
+  }).join('');
+
+  const merges =
+    `<button type="button" class="toggle${model.mergesOnly ? ' on' : ''}"` +
+    ` data-merges="${model.mergesOnly ? 'off' : 'on'}"` +
+    ` title="${escapeHtml(model.mergesOnly ? 'Count every commit' : 'Count only merges')}"` +
+    ` aria-pressed="${model.mergesOnly ? 'true' : 'false'}">merges only</button>`;
+
+  const authors =
+    model.authors.length > 1
+      ? `<select class="author" aria-label="Author">` +
+        `<option value=""${model.author === undefined ? ' selected' : ''}>Everyone</option>` +
+        model.authors
+          .map(
+            (author) =>
+              `<option value="${escapeHtml(author)}"${model.author === author ? ' selected' : ''}>` +
+              `${escapeHtml(author)}</option>`,
+          )
+          .join('') +
+        `</select>`
+      : '';
+
+  // Stated, because "no range" is otherwise indistinguishable from "the button
+  // did not register": three unlit buttons look the same either way.
+  const unbounded =
+    model.period === 'all'
+      ? `<span class="period-none" title="No date limit is set">no limit</span>`
+      : '';
+
+  return (
+    `<div class="lens"><div class="periods" role="group" aria-label="Period">${periods}${unbounded}</div>` +
+    `<div class="lens-filters">${merges}${authors}</div></div>`
+  );
+}
+
 function renderHeader(model: ListModel): string {
   // The "all" chip is always drawn, and it is why the header can never be
   // empty. A board where everything is clean and pushed has no other chip to
@@ -367,6 +459,7 @@ function renderHeader(model: ListModel): string {
   return (
     `<header class="head"><div class="chips">${all}${chips.join('')}${unknown}</div>` +
     `<div class="controls">${sort}</div>` +
+    `${renderLens(model)}` +
     `${model.busy ? BUSY_BAR : ''}</header>`
   );
 }
@@ -638,6 +731,52 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
   font-size: 0.92em;
 }
 .sort:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+/* The lens sits under the board's own controls and above the rule, because it
+   governs the pane below and the report, not this list. */
+.lens { padding: 4px 12px 7px; border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2)); }
+.periods { display: flex; align-items: center; gap: 3px; }
+.period-none {
+  flex: none;
+  padding-left: 4px;
+  font-size: 0.82em;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+.period {
+  flex: 1 1 0; min-width: 0; margin: 0; padding: 2px 4px;
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 4px;
+  background: none; color: var(--vscode-descriptionForeground);
+  font: inherit; font-size: 0.86em; white-space: nowrap; cursor: pointer;
+}
+.period:hover { background: var(--vscode-toolbar-hoverBackground); }
+.period:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.period.on {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-button-background, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-button-foreground, var(--vscode-list-activeSelectionForeground));
+  font-weight: 600;
+}
+.lens-filters { display: flex; gap: 5px; align-items: center; margin-top: 4px; }
+.toggle {
+  margin: 0; padding: 1px 7px;
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 4px;
+  background: none; color: var(--vscode-descriptionForeground);
+  font: inherit; font-size: 0.86em; cursor: pointer; white-space: nowrap;
+}
+.toggle.on {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+.toggle:focus-visible, .author:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.author {
+  flex: 1 1 auto; min-width: 0; padding: 1px 4px;
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));
+  border-radius: 4px;
+  background: var(--vscode-dropdown-background, transparent);
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  font: inherit; font-size: 0.86em;
+}
 .busy { height: 2px; overflow: hidden; background: var(--vscode-panel-border, rgba(128,128,128,0.3)); }
 .busy > span {
   display: block;
@@ -791,14 +930,32 @@ window.addEventListener('scroll', () => {
 
 document.addEventListener('change', (event) => {
   const target = event.target;
-  if (target instanceof HTMLSelectElement && target.classList.contains('sort')) {
+  if (!(target instanceof HTMLSelectElement)) { return; }
+  if (target.classList.contains('sort')) {
     api.postMessage({ type: 'sort', sort: target.value });
+  } else if (target.classList.contains('author')) {
+    api.postMessage({ type: 'commitFilter', author: target.value });
   }
 });
 
 document.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) { return; }
+
+  const period = target.closest('button[data-period]');
+  if (period) {
+    api.postMessage({ type: 'period', period: period.getAttribute('data-period') });
+    return;
+  }
+
+  const merges = target.closest('button[data-merges]');
+  if (merges) {
+    api.postMessage({
+      type: 'commitFilter',
+      mergesOnly: merges.getAttribute('data-merges') === 'on',
+    });
+    return;
+  }
 
   const chip = target.closest('button[data-filter]');
   if (chip) {

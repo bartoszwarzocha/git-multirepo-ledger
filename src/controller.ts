@@ -106,7 +106,7 @@ export class LedgerController implements vscode.Disposable {
    * of what they already had. Clicking a row still moves the pane to that
    * repository - that gesture is unambiguous and it says which one.
    */
-  private paneMode: PaneMode = 'activity';
+  private paneMode: PaneMode = 'selected';
   private activityPeriod: ActivityPeriod = 'week';
   private activityEntries: ActivityEntry[] = [];
   private activityFailures = '';
@@ -163,11 +163,10 @@ export class LedgerController implements vscode.Disposable {
   /** Called after `activate` has returned, so a walk never delays the view. */
   async start(): Promise<void> {
     await this.refresh({ rediscover: true });
-    // After the board, never before it: the digest reads every repository a
-    // second time, and the rows are what the reader is looking at while it runs.
-    if (this.paneMode === 'activity') {
-      await this.loadActivity();
-    }
+    // Read after the board, whichever scope the pane is in: the author list on
+    // the board is built from this answer, and `All` has to be instant rather
+    // than a second wait the reader pays for having pressed it.
+    await this.loadActivity();
   }
 
   dispose(): void {
@@ -366,6 +365,10 @@ export class LedgerController implements vscode.Disposable {
       busy,
       generation: this.generation,
       ...(this.selectedPath === undefined ? {} : { selectedPath: this.selectedPath }),
+      period: this.activityPeriod,
+      mergesOnly: this.activityMergesOnly,
+      ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+      authors: authorsOf(this.activityEntries),
     };
     this.list.setModel(model);
   }
@@ -378,7 +381,7 @@ export class LedgerController implements vscode.Disposable {
     switch (request.type) {
       case 'refresh':
         await this.refresh({ rediscover: true });
-        if (this.paneMode === 'activity') {
+        if (this.paneMode === 'all') {
           await this.loadActivity();
         }
         return;
@@ -389,6 +392,29 @@ export class LedgerController implements vscode.Disposable {
       case 'filter':
         await this.context.workspaceState.update(FILTER_KEY, request.filter);
         this.publish(this.passRunning);
+        return;
+      case 'period': {
+        if (!(ACTIVITY_PERIODS as readonly string[]).includes(request.period)) {
+          return;
+        }
+        this.activityPeriod = request.period as ActivityPeriod;
+        this.publish(this.passRunning);
+        // The period governs the pane's list and the report alike, so a change
+        // here re-reads rather than re-filtering what an older period fetched.
+        await this.loadActivity();
+        return;
+      }
+      case 'commitFilter':
+        if (request.mergesOnly !== undefined) {
+          this.activityMergesOnly = request.mergesOnly;
+        }
+        if (request.author !== undefined) {
+          this.activityAuthor = request.author.length > 0 ? request.author : undefined;
+        }
+        this.publish(this.passRunning);
+        if (this.paneMode === 'all') {
+          this.publishActivity(false);
+        }
         return;
       case 'settings':
         await vscode.commands.executeCommand(
@@ -595,25 +621,21 @@ export class LedgerController implements vscode.Disposable {
       case 'diff':
         await this.openDiff(request.sha, request.path);
         return;
-      case 'mode': {
-        const period = request.period;
-        if (period === undefined || !(ACTIVITY_PERIODS as readonly string[]).includes(period)) {
+      case 'scope': {
+        if (request.scope !== 'selected' && request.scope !== 'all') {
           return;
         }
-        this.paneMode = 'activity';
-        this.activityPeriod = period as ActivityPeriod;
-        await this.loadActivity();
+        this.paneMode = request.scope;
+        if (request.scope === 'all') {
+          await this.loadActivity();
+        } else {
+          this.publishHistory(
+            this.historySelection ? { kind: 'ready' } : { kind: 'no-selection' },
+            false,
+          );
+        }
         return;
       }
-      case 'activityFilter':
-        if (request.mergesOnly !== undefined) {
-          this.activityMergesOnly = request.mergesOnly;
-        }
-        if (request.author !== undefined) {
-          this.activityAuthor = request.author.length > 0 ? request.author : undefined;
-        }
-        this.publishActivity(false);
-        return;
       case 'openAt':
         await this.openFromDigest(request.repositoryPath, request.sha);
         return;
@@ -748,13 +770,14 @@ export class LedgerController implements vscode.Disposable {
   }
 
   private publishHistory(status: HistoryStatus, busy: boolean): void {
-    if (this.paneMode === 'activity') {
+    if (this.paneMode === 'all') {
       this.publishActivity(busy);
       return;
     }
     const row = this.historySelection;
     const model: HistoryModel = {
       mode: 'selected',
+      ...(row ? { selectedLabel: row.repository.label } : {}),
       status,
       busy,
       ...(row && this.commits.length > 0
@@ -978,7 +1001,14 @@ export class LedgerController implements vscode.Disposable {
       ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
     };
 
-    this.history.setModel({ mode: 'activity', activity, status: { kind: 'ready' }, busy });
+    // The board's author list comes from the same read, so the digest is built
+    // even while the pane is showing one repository - it simply is not published
+    // over it.
+    this.publish(this.passRunning);
+    if (this.paneMode !== 'all') {
+      return;
+    }
+    this.history.setModel({ mode: 'all', activity, status: { kind: 'ready' }, busy });
   }
 
   /**

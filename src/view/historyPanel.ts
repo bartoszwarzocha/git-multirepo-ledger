@@ -25,10 +25,8 @@ export type HistoryRequest =
   | { readonly type: 'diff'; readonly sha: string; readonly path: string }
   /** Ask for the next page. */
   | { readonly type: 'more' }
-  /** Switch the pane between the selected repository and the digest. */
-  | { readonly type: 'mode'; readonly period?: string }
-  /** Narrow the digest. */
-  | { readonly type: 'activityFilter'; readonly mergesOnly?: boolean; readonly author?: string }
+  /** Switch the pane between the selected repository and every repository. */
+  | { readonly type: 'scope'; readonly scope: string }
   /** Open one commit of the digest, which lives in a repository of its own. */
   | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string }
   /** Open the same period as a document, in the editor. */
@@ -113,21 +111,10 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       case 'more':
         this.requested.fire({ type: 'more' });
         return;
-      case 'mode':
-        this.requested.fire(
-          typeof payload['period'] === 'string'
-            ? { type: 'mode', period: payload['period'] }
-            : { type: 'mode' },
-        );
-        return;
-      case 'activityFilter':
-        this.requested.fire({
-          type: 'activityFilter',
-          ...(typeof payload['mergesOnly'] === 'boolean'
-            ? { mergesOnly: payload['mergesOnly'] }
-            : {}),
-          ...(typeof payload['author'] === 'string' ? { author: payload['author'] } : {}),
-        });
+      case 'scope':
+        if (typeof payload['scope'] === 'string') {
+          this.requested.fire({ type: 'scope', scope: payload['scope'] });
+        }
         return;
       case 'report':
         this.requested.fire({ type: 'report' });
@@ -249,31 +236,35 @@ function renderEmpty(model: HistoryModel): string {
 
 
 /**
- * The mode strip: one repository, or all of them.
+ * The scope switch, and it is the only control this pane has.
  *
- * Always drawn, in both modes, because the digest is the answer this extension
- * exists to give and a mode nobody can see is a mode nobody uses. `Selected` is
- * first because it is where a click on the board lands; the three periods are
- * one word each, so the strip fits a narrow sidebar without a menu.
+ * `Selected` is the default because the pane sits directly under the board and
+ * a reader who has just clicked a row expects to see that row's commits. `All`
+ * widens the same list to every repository above it, over the same period and
+ * the same filters, which are set on the board because they govern the report
+ * too.
+ *
+ * Two positions rather than five, and no period among them: the strip used to
+ * carry both scope and period as though they were one choice, so the reader had
+ * four buttons for five states and none of them said which state they were in.
  */
-function renderModes(model: HistoryModel): string {
-  // In `selected` mode no period is lit: the strip is a period filter over the
-  // digest, and the pane is showing one repository because a row was clicked.
-  const active = model.mode === 'activity' ? (model.activity?.period ?? '') : '';
+function renderScope(model: HistoryModel): string {
   const button = (value: string, label: string, title: string): string => {
-    const on = active === value;
+    const on = model.mode === value;
     return (
-      `<button type="button" class="mode${on ? ' on' : ''}" data-mode="${escapeHtml(value)}"` +
+      `<button type="button" class="scope${on ? ' on' : ''}" data-scope="${escapeHtml(value)}"` +
       ` title="${escapeHtml(title)}" aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(label)}</button>`
     );
   };
+  const where =
+    model.mode === 'selected' && model.selectedLabel !== undefined
+      ? `<span class="scope-where">${escapeHtml(model.selectedLabel)}</span>`
+      : '';
   return (
-    `<nav class="modes" role="group" aria-label="What this pane shows">` +
-    button('all', 'All', 'Every commit read, across every repository') +
-    button('today', 'Today', 'Everything that landed today, across every repository') +
-    button('week', '7 days', 'Everything from the last seven days, across every repository') +
-    button('month', '30 days', 'Everything from the last thirty days, across every repository') +
-    `</nav>`
+    `<nav class="scopes" role="group" aria-label="Whose commits">` +
+    button('selected', 'Selected', 'Commits from the repository selected above') +
+    button('all', 'All', 'Commits from every repository above') +
+    `${where}</nav>`
   );
 }
 
@@ -296,25 +287,6 @@ function renderActivity(model: HistoryModel): string {
     return '<div class="empty"><p>Reading every repository…</p></div>';
   }
 
-  const authors =
-    view.authors.length > 1
-      ? `<select class="author" aria-label="Author">` +
-        `<option value=""${view.author === undefined ? ' selected' : ''}>Everyone</option>` +
-        view.authors
-          .map(
-            (author) =>
-              `<option value="${escapeHtml(author)}"${view.author === author ? ' selected' : ''}>` +
-              `${escapeHtml(author)}</option>`,
-          )
-          .join('') +
-        `</select>`
-      : '';
-
-  const merges =
-    `<button type="button" class="toggle${view.mergesOnly ? ' on' : ''}" data-merges="${view.mergesOnly ? 'off' : 'on'}"` +
-    ` title="${escapeHtml(view.mergesOnly ? 'Show every commit' : 'Show only merges')}"` +
-    ` aria-pressed="${view.mergesOnly ? 'true' : 'false'}">merges only</button>`;
-
   const body =
     view.days.length === 0
       ? `<div class="empty"><p>${escapeHtml(view.summary)}</p></div>`
@@ -329,10 +301,9 @@ function renderActivity(model: HistoryModel): string {
   return (
     `<div class="digest"><p class="summary">${escapeHtml(view.summary)}</p>` +
     `${view.unreadable ? `<p class="warn">${escapeHtml(view.unreadable)}</p>` : ''}` +
-    `<div class="filters">${merges}${authors}` +
-    `<button type="button" class="toggle report" data-report="1"` +
+    `<div class="filters"><button type="button" class="toggle report" data-report="1"` +
     ` title="Open this period as a document: totals per repository, per author and per day">` +
-    `report</button></div></div>${body}`
+    `open the report</button></div></div>${body}`
   );
 }
 
@@ -363,7 +334,7 @@ export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
       : '';
 
   const body =
-    model.mode === 'activity'
+    model.mode === 'all'
       ? renderActivity(model)
       : commits.length > 0
         ? `${header}<div class="commits">${commits}</div>${more}`
@@ -379,7 +350,7 @@ export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
 <style nonce="${nonce}">${STYLES}</style>
 </head>
 <body>
-${renderModes(model)}
+${renderScope(model)}
 ${body}
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>
@@ -424,7 +395,7 @@ p { margin: 0 0 6px; }
 /* One word per mode, and the strip is always on screen: the digest is the
    answer this extension exists to give, and a mode nobody can see is one nobody
    uses. */
-.modes {
+.scopes {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -434,8 +405,8 @@ p { margin: 0 0 6px; }
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
   border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
 }
-.mode {
-  flex: 1 1 0;
+.scope {
+  flex: 0 1 auto;
   min-width: 0;
   margin: 0;
   padding: 2px 4px;
@@ -448,13 +419,24 @@ p { margin: 0 0 6px; }
   white-space: nowrap;
   cursor: pointer;
 }
-.mode:hover { background: var(--vscode-toolbar-hoverBackground); }
-.mode:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-.mode.on {
+.scope:hover { background: var(--vscode-toolbar-hoverBackground); }
+.scope:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+/* The named repository is the one button whose width is its content: the four
+   periods share the rest evenly, so a long repository name cannot squeeze them
+   into initials. */
+.mode.selected-repo { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.scope.on {
   border-color: var(--vscode-focusBorder);
   background: var(--vscode-button-background, var(--vscode-list-activeSelectionBackground));
   color: var(--vscode-button-foreground, var(--vscode-list-activeSelectionForeground));
   font-weight: 600;
+}
+/* Which repository, when it is one: the switch says the shape, this says the
+   name, and without it "Selected" is a word with no referent. */
+.scope-where {
+  flex: 1 1 auto; min-width: 0; align-self: center; padding-left: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.86em; font-weight: 600;
 }
 .digest { padding: 8px 10px 6px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2)); }
 .summary { margin: 0 0 4px; font-weight: 600; }
@@ -641,13 +623,6 @@ if (saved && typeof saved.scrollTop === 'number') {
 window.addEventListener('scroll', () => {
   api.setState({ scrollTop: window.scrollY });
 }, { passive: true });
-
-document.addEventListener('change', (event) => {
-  const target = event.target;
-  if (target instanceof HTMLSelectElement && target.classList.contains('author')) {
-    api.postMessage({ type: 'activityFilter', author: target.value });
-  }
-});
 
 document.addEventListener('click', (event) => {
   const target = event.target;

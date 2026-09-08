@@ -546,6 +546,18 @@ export interface ListModel {
   /** A pass is running behind the rows shown. */
   readonly busy: boolean;
   /**
+   * The period every commit question is asked over: the pane's list and the
+   * report both. On the board because it is a lens over everything, not a
+   * setting of one panel.
+   */
+  readonly period: string;
+  /** Only merges, in the pane and in the report alike. */
+  readonly mergesOnly: boolean;
+  /** One author, or absent for everybody. */
+  readonly author?: string;
+  /** Every author the current answer contains, for the control that picks one. */
+  readonly authors: readonly string[];
+  /**
    * The row the reader last clicked, by working-tree path.
    *
    * Selection is the primary click's whole effect, and it is deliberately
@@ -640,20 +652,25 @@ export type HistoryStatus =
   | { readonly kind: 'ready' };
 
 /**
- * What the pane below the board is showing.
+ * Whose commits the pane below the board is listing.
  *
- * Two questions, and they are not the same one: `selected` answers "what
- * happened in this repository", which every git surface in the editor already
- * answers, and `activity` answers "what happened across all of them", which
- * none of them does. The second is why this extension exists, so it is a mode
- * of the same pane rather than a screen a reader has to go and find.
+ * Scope only. The period, the author and the merges filter are not here: they
+ * are the lens the whole extension is looking through, they apply to the report
+ * as well, and putting them on the pane meant a reader had to go *down* to
+ * change something that governs what happens *up*. They live on the board now,
+ * and this is the one thing left that is genuinely about the pane.
  */
-export type PaneMode = 'selected' | 'activity';
+export type PaneMode = 'selected' | 'all';
 
 export interface HistoryModel {
   readonly mode: PaneMode;
   /** Present in `activity` mode. */
   readonly activity?: ActivityView;
+  /**
+   * The selected repository's name, so the mode strip can say what it is
+   * showing rather than lighting nothing at all.
+   */
+  readonly selectedLabel?: string;
   readonly status: HistoryStatus;
   readonly page?: HistoryPage;
   /** The commit whose file list is open. At most one is expanded at a time. */
