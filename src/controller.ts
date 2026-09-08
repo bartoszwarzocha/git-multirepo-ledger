@@ -411,10 +411,7 @@ export class LedgerController implements vscode.Disposable {
         if (request.author !== undefined) {
           this.activityAuthor = request.author.length > 0 ? request.author : undefined;
         }
-        this.publish(this.passRunning);
-        if (this.paneMode === 'all') {
-          this.publishActivity(false);
-        }
+        this.publishActivity(false);
         return;
       case 'settings':
         await vscode.commands.executeCommand(
@@ -448,15 +445,12 @@ export class LedgerController implements vscode.Disposable {
    */
   private select(target: string): void {
     const row = this.rows.find((entry) => pathKey(entry.repository.path) === pathKey(target));
-    // Logged because this is the one interaction with no visible effect when it
-    // goes wrong: a click that never arrives and a click that arrives and finds
-    // no row look identical on screen, and the log is what tells them apart.
     log.info(row ? `selected ${row.repository.label}` : `selected a path no row holds: ${target}`);
     this.selectedPath = row ? row.repository.path : undefined;
+    this.historySelection = row;
     this.paneMode = 'selected';
-    this.publish(this.passRunning);
     this.history.reveal();
-    void this.loadHistory(row, 0);
+    this.publishActivity(false);
   }
 
   private async act(action: RowAction, target: string): Promise<void> {
@@ -626,14 +620,7 @@ export class LedgerController implements vscode.Disposable {
           return;
         }
         this.paneMode = request.scope;
-        if (request.scope === 'all') {
-          await this.loadActivity();
-        } else {
-          this.publishHistory(
-            this.historySelection ? { kind: 'ready' } : { kind: 'no-selection' },
-            false,
-          );
-        }
+        this.publishActivity(false);
         return;
       }
       case 'openAt':
@@ -903,8 +890,14 @@ export class LedgerController implements vscode.Disposable {
           since: sinceFor(period),
           concurrency: this.concurrency(),
         });
+        // The same filters the pane is showing. A report that ignored them - which
+        // this one did - answers a question the reader did not ask, and its
+        // figures cannot be reconciled with what is on screen beside it.
         const input = {
-          entries: result.entries,
+          entries: filterActivity(result.entries, {
+            mergesOnly: this.activityMergesOnly,
+            ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
+          }),
           failures: result.failures,
           period,
           discovered: repositories.length,
@@ -970,8 +963,25 @@ export class LedgerController implements vscode.Disposable {
     this.publishActivity(false);
   }
 
+  /**
+   * The pane's list, in whichever scope it is in.
+   *
+   * One read and one filter path for both scopes. `Selected` used to be a
+   * separate `git log` down a different code path, which is why the period, the
+   * merges toggle and the author picker did nothing in it - the default scope -
+   * and why a reader pressing them saw the list sit there. `Selected` is now the
+   * same list narrowed to one repository, so a filter cannot apply to one scope
+   * and not the other.
+   */
   private publishActivity(busy: boolean): void {
-    const filtered = filterActivity(this.activityEntries, {
+    const scoped =
+      this.paneMode === 'selected' && this.selectedPath !== undefined
+        ? this.activityEntries.filter(
+            (entry) => pathKey(entry.repositoryPath) === pathKey(this.selectedPath ?? ''),
+          )
+        : this.activityEntries;
+
+    const filtered = filterActivity(scoped, {
       mergesOnly: this.activityMergesOnly,
       ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
     });
@@ -980,7 +990,9 @@ export class LedgerController implements vscode.Disposable {
     const activity: ActivityView = {
       period: this.activityPeriod,
       summary: summary.sentence,
-      ...(this.activityFailures.length > 0 ? { unreadable: this.activityFailures } : {}),
+      ...(this.activityFailures.length > 0 && this.paneMode === 'all'
+        ? { unreadable: this.activityFailures }
+        : {}),
       days: groupByDay(filtered, Date.now()).map((day) => ({
         heading: day.heading,
         entries: day.entries.map((entry) => ({
@@ -994,21 +1006,30 @@ export class LedgerController implements vscode.Disposable {
           merge: entry.commit.parents.length > 1,
         })),
       })),
-      // Offered from the unfiltered set, so choosing an author does not remove
-      // every other name from the control that chose them.
+      // Offered from the whole answer rather than the scoped one, so choosing a
+      // repository does not empty the control that chooses a person.
       authors: authorsOf(this.activityEntries),
       mergesOnly: this.activityMergesOnly,
       ...(this.activityAuthor === undefined ? {} : { author: this.activityAuthor }),
     };
 
-    // The board's author list comes from the same read, so the digest is built
-    // even while the pane is showing one repository - it simply is not published
-    // over it.
+    // The board's author list comes from the same read.
     this.publish(this.passRunning);
-    if (this.paneMode !== 'all') {
-      return;
-    }
-    this.history.setModel({ mode: 'all', activity, status: { kind: 'ready' }, busy });
+
+    const status: HistoryStatus =
+      this.paneMode === 'selected' && this.selectedPath === undefined
+        ? { kind: 'no-selection' }
+        : { kind: 'ready' };
+
+    this.history.setModel({
+      mode: this.paneMode,
+      activity,
+      status,
+      busy,
+      ...(this.paneMode === 'selected' && this.historySelection
+        ? { selectedLabel: this.historySelection.repository.label }
+        : {}),
+    });
   }
 
   /**

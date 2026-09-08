@@ -14,8 +14,7 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
-import type { ActivityEntryView, CommitRefKind, HistoryModel } from '../model/types.ts';
-import { buildCommits, buildFiles, commitKind, fileCountText, type RenderedCommit } from './historyRow.ts';
+import type { ActivityEntryView, HistoryModel } from '../model/types.ts';
 import { escapeHtml } from './listPanel.ts';
 
 export type HistoryRequest =
@@ -151,76 +150,12 @@ function createNonce(): string {
   return randomBytes(16).toString('base64').replace(/[^A-Za-z0-9]/g, '');
 }
 
-const REF_TITLES: Record<CommitRefKind, string> = {
-  head: 'where HEAD is',
-  branch: 'a local branch',
-  remote: 'a remote-tracking branch',
-  tag: 'a tag',
-};
-
-function renderCommit(commit: RenderedCommit, model: HistoryModel): string {
-  const open = model.expanded === commit.sha;
-  const chips = commit.refs
-    .map(
-      (ref) =>
-        `<span class="ref ${ref.kind}" title="${escapeHtml(REF_TITLES[ref.kind])}">` +
-        `${escapeHtml(ref.name)}</span>`,
-    )
-    .join('');
-
-  // Marked only when the set was established. A commit that nobody checked
-  // carries no mark rather than an absent one that reads as "pushed".
-  const unpushed = commit.unpushed
-    ? '<span class="unpushed" title="Exists on no remote this repository knows about">only here</span>'
-    : '';
-
-  const merge =
-    commit.mergeOf !== undefined
-      ? `<span class="merge" title="A merge; its changes belong to its parents">merge of ${commit.mergeOf}</span>`
-      : '';
-
-  const files = open ? renderFiles(commit, model) : '';
-
-  return `<div class="commit kind-${commitKind(commit)}${open ? ' open' : ''}">
-<button type="button" class="commit-main" data-sha="${escapeHtml(commit.sha)}"
- title="${escapeHtml(commit.tooltip)}" aria-expanded="${open ? 'true' : 'false'}">
-<span class="c1"><span class="sha">${escapeHtml(commit.shortSha)}</span><span class="age">${escapeHtml(commit.age)}</span><span class="author">${escapeHtml(commit.author)}</span>${unpushed}${merge}</span>
-<span class="c2">${escapeHtml(commit.subject)}</span>
-${chips.length > 0 ? `<span class="refs">${chips}</span>` : ''}
-</button>
-${files}
-</div>`;
-}
-
-function renderFiles(commit: RenderedCommit, model: HistoryModel): string {
-  if (commit.mergeOf !== undefined) {
-    return `<div class="files"><p class="note">A merge brings no changes of its own. Open one of its ${commit.mergeOf} parents to see what came in.</p></div>`;
-  }
-  if (model.files === undefined) {
-    return `<div class="files"><p class="note">Reading…</p></div>`;
-  }
-  if (model.files.length === 0) {
-    return `<div class="files"><p class="note">This commit changed no files.</p></div>`;
-  }
-  const count = `<p class="note">${escapeHtml(fileCountText(model.files.length))}</p>`;
-  const rows = buildFiles(model.files)
-    .map(
-      (file) =>
-        `<button type="button" class="file" data-sha="${escapeHtml(commit.sha)}"` +
-        ` data-path="${escapeHtml(file.path)}" title="${escapeHtml(file.tooltip)}">` +
-        `<span class="st ${escapeHtml(file.status)}">${escapeHtml(file.status)}</span>` +
-        `<span class="dir">${escapeHtml(file.directory)}</span>` +
-        `<span class="fname">${escapeHtml(file.name)}</span></button>`,
-    )
-    .join('');
-  return `<div class="files">${count}${rows}</div>`;
-}
 
 function renderEmpty(model: HistoryModel): string {
   switch (model.status.kind) {
     case 'no-selection':
-      return `<div class="empty"><p>Select a repository above.</p>
-<p class="hint">Its recent commits appear here, so reading a repository’s past never means opening it.</p></div>`;
+      return `<div class="empty"><p>Select a repository above, or press <strong>All</strong>.</p>
+<p class="hint">This pane lists commits over the period set on the board — from the repository you pick, or from every one of them.</p></div>`;
     case 'reading':
       return `<div class="empty"><p>Reading ${escapeHtml(model.status.label)}…</p></div>`;
     case 'unborn':
@@ -314,31 +249,10 @@ export function renderHistoryHtml(model: HistoryModel, nonce: string): string {
     `script-src 'nonce-${nonce}'`,
   ].join('; ');
 
-  const page = model.page;
-  const commits =
-    page && page.commits.length > 0
-      ? buildCommits(page.commits, Date.now(), page.unpushedKnown)
-          .map((commit) => renderCommit(commit, model))
-          .join('')
-      : '';
-
-  const header =
-    page && page.commits.length > 0
-      ? `<header class="head"><span class="where">${escapeHtml(page.label)}</span>` +
-        `${model.busy ? BUSY : ''}</header>`
-      : '';
-
-  const more =
-    page?.more === true
-      ? `<div class="more"><button type="button" class="link" data-more="1">Show more</button></div>`
-      : '';
-
-  const body =
-    model.mode === 'all'
-      ? renderActivity(model)
-      : commits.length > 0
-        ? `${header}<div class="commits">${commits}</div>${more}`
-        : renderEmpty(model);
+  // Both scopes render the same list; only what is in it differs. `Selected`
+  // used to be a second read down its own path, which is why the period, the
+  // merges toggle and the author picker did nothing in it - the default scope.
+  const body = model.status.kind === 'ready' ? renderActivity(model) : renderEmpty(model);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -357,7 +271,6 @@ ${body}
 </html>`;
 }
 
-const BUSY = '<span class="busy" role="status" aria-label="Reading"></span>';
 
 const STYLES = `
 :root { color-scheme: light dark; }
