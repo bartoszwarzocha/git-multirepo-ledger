@@ -128,7 +128,7 @@
         },
         {
           "command": "multirepoLedger.showOutput",
-          "when": "view =~ /^multirepoLedger\\.(repositories|history)$/",
+          "when": "view == multirepoLedger.repositories",
           "group": "1_ledger@0"
         }
       ]
