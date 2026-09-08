@@ -2,6 +2,10 @@
 
 ![Git Multirepo Ledger](resources/screenshot.jpg)
 
+*Not a mock-up. Every figure above was read by the extension from a real `.git`, in a directory
+of invented repositories that `scripts/make-demo-workspace.ts` builds — so you can run it and
+get the same board.*
+
 **Every other repository list tells you where each repository *is*. This one tells you when it last
 moved — and sorts by it.**
 
@@ -27,8 +31,6 @@ measured against remote-tracking refs: those are exactly as old as your last fet
 row can read *in sync* having asked its server nothing for a month. It never merges, pushes or
 prunes. When a repository wants credentials the fetch fails immediately rather than waiting on a
 prompt that cannot be answered, and you are shown git's own words and the exact command.
-
-> **This is early.** See [Status](#status) at the bottom before you expect any of it to work.
 
 ## The row
 
@@ -86,7 +88,10 @@ against one side and misleading against the other.
 | `multirepoLedger.dirty.enabled` | `true` | Show which repositories hold uncommitted work. The one read that walks the working tree, so it costs a second `git` process per repository on screen. While off, the row says nothing there rather than showing a zero. |
 | `multirepoLedger.concurrency` | `0` | How many repositories are read at once. `0` derives it from what the machine says it can run in parallel. |
 | `multirepoLedger.history.pageSize` | `50` | Commits per page in the history pane. |
-| `multirepoLedger.forge.enabled` | `false` | Open merge and pull request counts, via the `gh` and `glab` CLIs. **Off by default: it reaches the network.** While off, neither tool is invoked. |
+| `multirepoLedger.badge` | `unpushed` | What the number on the Activity Bar icon counts. Every option is also a chip on the board, so one click shows exactly what the badge counted. A count of none draws no badge rather than a `0`. |
+| `multirepoLedger.forge.enabled` | `false` | Open merge and pull request counts, via the `gh` and `glab` CLIs. **Off by default: it reaches the network.** While off, neither tool is invoked. The GitHub half is exercised against a real `gh`; the GitLab half is not yet, and fails to silence rather than to a guess. |
+| `multirepoLedger.fetch.enabled` | `false` | Offer a **Fetch** button on each row and in the view title. **Off by default: it reaches the network.** It runs `git fetch` and nothing else — no merge, no push, no prune — so it can update what the remote knows without touching your working tree, your branches or any commit you have made. |
+| `multirepoLedger.fetch.concurrency` | `4` | How many repositories are fetched at once. Unlike the read concurrency this cannot be derived from your machine: the limit belongs to a server the extension cannot see. |
 
 ## Privacy
 
@@ -94,37 +99,6 @@ Everything except `multirepoLedger.forge.enabled` is a local read of your own re
 forge setting on, `gh` and `glab` are run as subprocesses and talk to whatever hosts your
 repositories point at, using credentials those tools already hold; no token is ever asked for or
 stored, and there is no telemetry and no account. With it off, nothing leaves the machine.
-
-## Status
-
-Early, and not published. What exists: the manifest and the build; the data model; the walk that
-finds repositories; the classification of worktrees, submodules, bare and shallow checkouts from
-the filesystem; the readers for `for-each-ref` and `status --porcelain=v2`; the mid-operation and
-fetch-evidence readers; and the logic that decides what every row says and in what order. All of it
-is unit-tested against repositories the tests build and drive into each state.
-
-Open review counts are built and switched off, which is where they will stay by default. They run
-`gh` and `glab`, batched by owner rather than per repository — GitHub allows thirty search requests
-a minute, and a directory of forty repositories asked one at a time renders a half-populated board
-that reads as a bug. A query that stops at its own limit renders as `41+` rather than as a total,
-and a host with no client shows nothing rather than a zero. The `glab` half has never met a real
-`glab`; until it does it fails to silence, which is the ship-safe state and not a substitute for
-the check.
-
-What does not exist: merge lanes in the history pane, a text filter over the board, and three of
-the five row hand-offs. All are recorded as deferred, with their reasons, in
-`openspec/changes/implement-multirepo-ledger/`. Nobody has yet run the empty and unusual states by hand
-in the Extension Development Host, which is the largest thing standing between this and a release.
-
-The screenshot at the top is real, and it is not of anybody's work. It is taken against a directory
-of repositories built by `scripts/make-demo-workspace.ts` - invented products, invented people, and
-bare repositories standing in for remotes, so that every figure on it is derived by the extension
-from a real `.git` rather than drawn by hand. Run that script and you get the same board.
-
-No benchmarks or install counts appear above because neither exists yet, and neither will be added
-before it is true. The one number worth stating plainly: nothing comparable on the Marketplace has
-more than a few hundred installs, so this is built because its author wants it, not because demand
-for it has been demonstrated.
 
 ## Licence
 

@@ -2,7 +2,7 @@
   "name": "git-multirepo-ledger",
   "displayName": "Git Multirepo Ledger",
   "description": "A status board for a whole directory of git repositories - multi-repo, multirepo, many repositories at once: what moved last, on which branch, how far from upstream, and what is waiting in review.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "bartosz-warzocha",
   "license": "MIT",
   "repository": {
