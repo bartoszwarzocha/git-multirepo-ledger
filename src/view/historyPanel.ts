@@ -30,7 +30,9 @@ export type HistoryRequest =
   /** Narrow the digest. */
   | { readonly type: 'activityFilter'; readonly mergesOnly?: boolean; readonly author?: string }
   /** Open one commit of the digest, which lives in a repository of its own. */
-  | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string };
+  | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string }
+  /** Open the same period as a document, in the editor. */
+  | { readonly type: 'report' };
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = 'repoLedger.history';
@@ -126,6 +128,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
             : {}),
           ...(typeof payload['author'] === 'string' ? { author: payload['author'] } : {}),
         });
+        return;
+      case 'report':
+        this.requested.fire({ type: 'report' });
         return;
       case 'openAt':
         if (
@@ -252,7 +257,9 @@ function renderEmpty(model: HistoryModel): string {
  * one word each, so the strip fits a narrow sidebar without a menu.
  */
 function renderModes(model: HistoryModel): string {
-  const active = model.mode === 'activity' ? (model.activity?.period ?? '') : 'selected';
+  // In `selected` mode no period is lit: the strip is a period filter over the
+  // digest, and the pane is showing one repository because a row was clicked.
+  const active = model.mode === 'activity' ? (model.activity?.period ?? '') : '';
   const button = (value: string, label: string, title: string): string => {
     const on = active === value;
     return (
@@ -262,7 +269,7 @@ function renderModes(model: HistoryModel): string {
   };
   return (
     `<nav class="modes" role="group" aria-label="What this pane shows">` +
-    button('selected', 'Selected', 'The repository selected above') +
+    button('all', 'All', 'Every commit read, across every repository') +
     button('today', 'Today', 'Everything that landed today, across every repository') +
     button('week', '7 days', 'Everything from the last seven days, across every repository') +
     button('month', '30 days', 'Everything from the last thirty days, across every repository') +
@@ -322,7 +329,10 @@ function renderActivity(model: HistoryModel): string {
   return (
     `<div class="digest"><p class="summary">${escapeHtml(view.summary)}</p>` +
     `${view.unreadable ? `<p class="warn">${escapeHtml(view.unreadable)}</p>` : ''}` +
-    `<div class="filters">${merges}${authors}</div></div>${body}`
+    `<div class="filters">${merges}${authors}` +
+    `<button type="button" class="toggle report" data-report="1"` +
+    ` title="Open this period as a document: totals per repository, per author and per day">` +
+    `report</button></div></div>${body}`
   );
 }
 
@@ -457,6 +467,7 @@ p { margin: 0 0 6px; }
   border-radius: 4px; background: none; color: var(--vscode-descriptionForeground);
   font: inherit; font-size: 0.88em; cursor: pointer; white-space: nowrap;
 }
+.toggle.report { margin-left: auto; }
 .toggle.on {
   border-color: var(--vscode-focusBorder);
   background: var(--vscode-list-activeSelectionBackground);
@@ -646,6 +657,11 @@ document.addEventListener('click', (event) => {
   if (mode) {
     const value = mode.getAttribute('data-mode');
     api.postMessage(value === 'selected' ? { type: 'mode' } : { type: 'mode', period: value });
+    return;
+  }
+
+  if (target.closest('button[data-report]')) {
+    api.postMessage({ type: 'report' });
     return;
   }
 

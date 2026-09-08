@@ -35,7 +35,8 @@ import type {
   SortMode,
 } from './model/types.ts';
 import { readDirtyState, readRows } from './read/reader.ts';
-import { readActivity, type ActivityEntry } from './read/activity.ts';
+import { readActivity, type ActivityEntry, type ActivityFailure } from './read/activity.ts';
+import { renderActivityReport } from './report/activityReport.ts';
 import {
   ACTIVITY_PERIODS,
   authorsOf,
@@ -94,10 +95,21 @@ export class LedgerController implements vscode.Disposable {
   private historyAbort: AbortController | undefined;
   private historyGeneration = 0;
   private filesGeneration = 0;
-  private paneMode: PaneMode = 'selected';
+  /**
+   * The pane opens on the digest, not on a repository.
+   *
+   * Reading one repository's history is what every git extension in the editor
+   * already does; reading across all of them is the only thing this one adds.
+   * Opening on `selected` put the answer nobody else gives behind a control the
+   * reader had to find first, and made the extension look like a slower version
+   * of what they already had. Clicking a row still moves the pane to that
+   * repository - that gesture is unambiguous and it says which one.
+   */
+  private paneMode: PaneMode = 'activity';
   private activityPeriod: ActivityPeriod = 'week';
   private activityEntries: ActivityEntry[] = [];
   private activityFailures = '';
+  private activityFailureList: ActivityFailure[] = [];
   private activityMergesOnly = false;
   private activityAuthor: string | undefined;
   private activityAbort: AbortController | undefined;
@@ -150,6 +162,11 @@ export class LedgerController implements vscode.Disposable {
   /** Called after `activate` has returned, so a walk never delays the view. */
   async start(): Promise<void> {
     await this.refresh({ rediscover: true });
+    // After the board, never before it: the digest reads every repository a
+    // second time, and the rows are what the reader is looking at while it runs.
+    if (this.paneMode === 'activity') {
+      await this.loadActivity();
+    }
   }
 
   dispose(): void {
@@ -578,15 +595,7 @@ export class LedgerController implements vscode.Disposable {
         return;
       case 'mode': {
         const period = request.period;
-        if (period === undefined) {
-          this.paneMode = 'selected';
-          this.publishHistory(
-            this.historySelection ? { kind: 'ready' } : { kind: 'no-selection' },
-            false,
-          );
-          return;
-        }
-        if (!(ACTIVITY_PERIODS as readonly string[]).includes(period)) {
+        if (period === undefined || !(ACTIVITY_PERIODS as readonly string[]).includes(period)) {
           return;
         }
         this.paneMode = 'activity';
@@ -605,6 +614,9 @@ export class LedgerController implements vscode.Disposable {
         return;
       case 'openAt':
         await this.openFromDigest(request.repositoryPath, request.sha);
+        return;
+      case 'report':
+        await this.openActivityReport();
         return;
     }
   }
@@ -830,6 +842,58 @@ export class LedgerController implements vscode.Disposable {
     this.publish(false);
   }
 
+
+  /**
+   * The digest as a document, in the editor.
+   *
+   * The pane answers "what happened" in a column two hundred pixels wide, which
+   * is enough to notice something and not enough to add anything up. This is
+   * the same read arranged into tables - per repository, per author, per day -
+   * in a window with room for them.
+   *
+   * An untitled markdown document rather than a webview: it opens in the editor
+   * the reader already has, and it can be saved, pasted into a stand-up note,
+   * or diffed against last week's. A webview would look better and could do
+   * none of those.
+   *
+   * It runs its own read rather than reusing the pane's, because the pane may be
+   * showing a filtered view or a different period, and a report that silently
+   * inherited a filter would be a document whose numbers nobody could reproduce.
+   */
+  private async openActivityReport(): Promise<void> {
+    const repositories = this.cache.current ?? [];
+    if (repositories.length === 0) {
+      void vscode.window.showInformationMessage(
+        'Repo Ledger has not found any repositories to report on yet.',
+      );
+      return;
+    }
+
+    const period = this.activityPeriod;
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: 'Repo Ledger: reading every repository' },
+      async () => {
+        const result = await readActivity({
+          repositories,
+          since: sinceFor(period),
+          concurrency: this.concurrency(),
+        });
+        const markdown = renderActivityReport({
+          entries: result.entries,
+          failures: result.failures,
+          period,
+          discovered: repositories.length,
+          now: Date.now(),
+        });
+        const document = await vscode.workspace.openTextDocument({
+          language: 'markdown',
+          content: markdown,
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+      },
+    );
+  }
+
   private forgeEnabled(): boolean {
     return this.config.get<boolean>('forge.enabled', false);
   }
@@ -856,6 +920,7 @@ export class LedgerController implements vscode.Disposable {
     const repositories = this.cache.current ?? [];
     if (repositories.length === 0) {
       this.activityEntries = [];
+      this.activityFailureList = [];
       this.activityFailures = '';
       this.publishActivity(false);
       return;
@@ -874,6 +939,7 @@ export class LedgerController implements vscode.Disposable {
     }
 
     this.activityEntries = result.entries;
+    this.activityFailureList = result.failures;
     this.activityFailures = failureSentence(result.failures) ?? '';
     log.info(
       `digest: ${result.entries.length} commits from ${result.asked} of ${repositories.length} repositories`,
@@ -1032,6 +1098,9 @@ export class LedgerController implements vscode.Disposable {
         resetCliCache();
         return this.refresh({ rediscover: true });
       }),
+      vscode.commands.registerCommand('repoLedger.activityReport', () =>
+        this.openActivityReport(),
+      ),
       vscode.commands.registerCommand('repoLedger.openAdditionalRootsSetting', () =>
         vscode.commands.executeCommand(
           'workbench.action.openSettings',

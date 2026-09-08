@@ -79,6 +79,12 @@
     },
     "commands": [
       {
+        "command": "repoLedger.activityReport",
+        "title": "Activity Report",
+        "category": "Repo Ledger",
+        "icon": "$(graph)"
+      },
+      {
         "command": "repoLedger.refresh",
         "title": "Refresh",
         "category": "Repo Ledger",
@@ -98,9 +104,14 @@
     "menus": {
       "view/title": [
         {
-          "command": "repoLedger.refresh",
+          "command": "repoLedger.activityReport",
           "when": "view =~ /^repoLedger\\.(repositories|history)$/",
           "group": "navigation@0"
+        },
+        {
+          "command": "repoLedger.refresh",
+          "when": "view =~ /^repoLedger\\.(repositories|history)$/",
+          "group": "navigation@1"
         },
         {
           "command": "repoLedger.showOutput",

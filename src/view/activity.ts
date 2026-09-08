@@ -11,11 +11,12 @@ import type { ActivityEntry, ActivityFailure } from '../read/activity.ts';
 import { relativeAge } from './row.ts';
 
 /** How far back the digest looks. A closed set, because each is one word. */
-export type ActivityPeriod = 'today' | 'week' | 'month';
+export type ActivityPeriod = 'all' | 'today' | 'week' | 'month';
 
-export const ACTIVITY_PERIODS: readonly ActivityPeriod[] = ['today', 'week', 'month'];
+export const ACTIVITY_PERIODS: readonly ActivityPeriod[] = ['all', 'today', 'week', 'month'];
 
 export const PERIOD_LABELS: Record<ActivityPeriod, string> = {
+  all: 'All',
   today: 'Today',
   week: '7 days',
   month: '30 days',
@@ -31,6 +32,10 @@ export const PERIOD_LABELS: Record<ActivityPeriod, string> = {
  */
 export function sinceFor(period: ActivityPeriod): string {
   switch (period) {
+    // No date bound at all. Still bounded per repository by the read's own cap,
+    // so "all" cannot mean "hand the pane ten years of one busy repository".
+    case 'all':
+      return '';
     case 'today':
       return 'midnight';
     case 'week':
@@ -156,7 +161,12 @@ export function summarise(
   const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
   const authors = new Set(entries.map((entry) => entry.commit.author)).size;
 
-  const window = period === 'today' ? 'today' : `in the last ${PERIOD_LABELS[period]}`;
+  const window =
+    period === 'all'
+      ? 'in all the history read'
+      : period === 'today'
+        ? 'today'
+        : `in the last ${PERIOD_LABELS[period]}`;
   const sentence =
     entries.length === 0
       ? `Nothing landed ${window}.`

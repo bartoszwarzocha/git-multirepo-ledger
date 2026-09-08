@@ -201,71 +201,40 @@ function emptyTally(): Tally {
 // ---------------------------------------------------------------------------
 
 /**
- * One glyph per row state, drawn rather than borrowed.
+ * One coloured dot per row, which is what the mockup this was chosen from
+ * showed and what a board of twenty rows can actually be read at.
  *
- * A webview has no codicon font, and an emoji would render as somebody else's
- * artwork at somebody else's size. Each shape carries `currentColor`, so the
- * row's state colour paints it without a second table of colours.
+ * One shape, ten colours - not ten shapes. A column of different glyphs asks
+ * the reader to learn a vocabulary before the board tells them anything; a
+ * column of dots is scanned in one pass and the odd colour out is the row worth
+ * looking at. The word is in the tooltip and, for everything that is not
+ * `clean`, on line 1 or line 3 in text as well, so the colour is never the only
+ * carrier of the fact.
+ *
+ * Drawn rather than borrowed because a webview has no codicon font and an emoji
+ * would render as somebody else's artwork at somebody else's size. Both shapes
+ * carry `currentColor`, so the row's state colour paints them without a second
+ * table of colours.
  */
+const DOT = '<circle cx="8" cy="8" r="4.2" fill="currentColor"/>';
+
+const HOLLOW =
+  '<circle cx="8" cy="8" r="3.9" fill="none" stroke="currentColor" stroke-width="1.4"/>';
 const STATE_ICONS: Record<RowState, string> = {
-  // A solid dot: nothing to do, and the quietest mark on the board.
-  clean: '<circle cx="8" cy="8" r="3.2" fill="currentColor"/>',
-  // A pencil, because uncommitted work is work in progress rather than a state
-  // of the ring.
-  dirty:
-    '<path d="M3.6 12.4 3 13l.6-2.4 6.5-6.5 1.8 1.8-6.5 6.5z" fill="currentColor"/>' +
-    '<path d="M10.9 3.2 12 2.1a1 1 0 0 1 1.4 0l.5.5a1 1 0 0 1 0 1.4l-1.1 1.1z" fill="currentColor"/>',
-  // An arrow leaving the machine: work that exists only here.
-  unpushed:
-    '<path d="M8 13.2V3.4M4.2 7 8 3.2 11.8 7" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
-  behind:
-    '<path d="M8 2.8v9.8M4.2 9 8 12.8 11.8 9" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
-  // Both directions at once, which is the one state a single arrow cannot say.
-  diverged:
-    '<path d="M5.2 12.6V4.4M2.6 6.6 5.2 4 7.8 6.6" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
-    '<path d="M10.8 3.4v8.2M8.2 9.4l2.6 2.6 2.6-2.6" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-  // A commit off the branch line: a node with the line stopping short of it.
-  detached:
-    '<path d="M8 1.8v3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
-    '<circle cx="8" cy="8.4" r="2.9" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '<path d="M12.6 12.4 14 13.8M3.4 12.4 2 13.8" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.4" stroke-linecap="round"/>',
-  // The one shape on the board that is not round, because it is the one state
-  // that is a warning rather than a description.
-  operation:
-    '<path d="M8 1.9 15 14.1H1Z" fill="none" stroke="currentColor" stroke-width="1.4"' +
-    ' stroke-linejoin="round"/>' +
-    '<path d="M8 6v3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
-    '<circle cx="8" cy="11.9" r="0.85" fill="currentColor"/>',
-  // A line with nothing at the far end of it: there is no upstream to compare to.
-  'no-upstream':
-    '<circle cx="4.4" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
-    '<path d="M7.4 8h3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
-    '<path d="M12 5.9 14.1 8 12 10.1" fill="none" stroke="currentColor" stroke-width="1.4"' +
-    ' stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>',
-  // An empty outline waiting for its first commit.
-  unborn:
-    '<circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
-    '<path d="M8 5.4v5.2M5.4 8h5.2" fill="none" stroke="currentColor" stroke-width="1.4"' +
-    ' stroke-linecap="round"/>',
-  // A cross, and the only glyph drawn heavily: it is the one row carrying an
-  // error the reader can act on.
-  unreadable:
-    '<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.9" stroke-linecap="round"/>',
-  // Three dots. Nothing has been established about this repository yet, and the
-  // shape says "waiting" rather than joining the family of rings, which is the
-  // mistake the first version of this table made: clean, unborn, detached and
-  // unknown were four hollow circles differing only in their dash pattern, and
-  // at fourteen pixels a dash pattern is not a difference.
-  unknown:
-    '<circle cx="3.4" cy="8" r="1.15" fill="currentColor"/>' +
-    '<circle cx="8" cy="8" r="1.15" fill="currentColor"/>' +
-    '<circle cx="12.6" cy="8" r="1.15" fill="currentColor"/>',
+  clean: DOT,
+  dirty: DOT,
+  unpushed: DOT,
+  behind: DOT,
+  diverged: DOT,
+  detached: DOT,
+  operation: DOT,
+  'no-upstream': DOT,
+  unborn: DOT,
+  unreadable: DOT,
+  // The one exception, and it is not a state of the repository: nothing has been
+  // read yet, so the mark is hollow. A filled dot in the state colours would be
+  // claiming a state nobody established.
+  unknown: HOLLOW,
 };
 
 function icon(state: RowState): string {
@@ -592,7 +561,7 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
 /* State lives in one custom property per row, so the glyph and the edge rule
    are coloured from the same decision. Only the states that ask for a decision
    are tinted; colouring all ten would leave the eye nothing to land on. */
-.clean { --state: var(--vscode-charts-green, #7fb98b); }
+.clean { --state: var(--vscode-charts-green, #6a9955); }
 .dirty { --state: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, #cca700)); }
 .unpushed { --state: var(--vscode-charts-blue, #4a8cd8); }
 .behind { --state: var(--vscode-charts-purple, #9a7bd0); }
@@ -603,7 +572,7 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
 /* Not a state of the repository but a state of our knowledge, so it is the one
    glyph drawn at less than full strength. */
 .unknown { --state: var(--vscode-descriptionForeground); opacity: 0.7; }
-.unborn { --state: var(--vscode-charts-blue, #4a8cd8); }
+.unborn { --state: var(--vscode-charts-purple, #9a7bd0); }
 .unreadable { --state: var(--vscode-list-errorForeground, #d97a6a); }
 .icon { color: var(--state); flex: none; }
 .head {

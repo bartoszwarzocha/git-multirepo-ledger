@@ -639,10 +639,19 @@ async function commit(repo: string, message: string, file = 'a.txt'): Promise<vo
   git(repo, ['commit', '--quiet', '-m', message]);
 }
 
-/** The read exactly as the extension will run it, probe and all. */
+/**
+ * The read exactly as the extension will run it, probe and all.
+ *
+ * `timeoutMs` is raised well above the extension's own because these tests build
+ * their repositories from scratch, sometimes with hundreds of refs, on whatever
+ * machine and whatever disk CI happens to give them. The extension's ten seconds
+ * is a guard against a repository that hangs; here it would be a guard against a
+ * busy build agent, and a suite that goes red when the machine is loaded teaches
+ * everyone to ignore it.
+ */
 async function readRefs(repo: string): Promise<ReturnType<typeof parseRefs>> {
   const command = await refsCommand();
-  const result = await runGit(command.args, { cwd: repo });
+  const result = await runGit(command.args, { cwd: repo, timeoutMs: 120_000 });
   assert.equal(result.code, 0, `${result.command} exited ${result.code}: ${result.stderr}`);
   return parseRefs(result.stdout, { form: command.form, truncated: result.truncated });
 }

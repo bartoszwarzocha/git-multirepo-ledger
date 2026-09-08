@@ -67,10 +67,14 @@ export interface ActivityRequest {
 const FORMAT = ['%H', '%P', '%D', '%ct', '%an', '%s'].join('%x1f') + '%x1e';
 
 export function activityArgs(since: string): string[] {
+  // An empty bound is not `--since=`: git accepts that and reads it as an
+  // unparseable date, which quietly returns everything on some versions and
+  // nothing on others. The flag is left out instead.
+  const bound = since.length > 0 ? [`--since=${since}`] : [];
   return [
     '--no-optional-locks',
     'log',
-    `--since=${since}`,
+    ...bound,
     `--max-count=${ACTIVITY_LIMIT_PER_REPOSITORY}`,
     '--date-order',
     `--format=${FORMAT}`,

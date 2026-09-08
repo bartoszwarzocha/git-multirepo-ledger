@@ -1,0 +1,223 @@
+/**
+ * The digest as a document: every repository at once, in tables, in the editor.
+ *
+ * The pane in the sidebar answers "what happened" in a column two hundred
+ * pixels wide, which is enough to notice something and not enough to add
+ * anything up. This is the same data arranged to be read rather than scanned -
+ * per repository, per author, per day - in a window with room for a table.
+ *
+ * Markdown rather than a webview: it opens in the editor the reader already
+ * has, it can be saved, pasted into a stand-up note or a pull request, and
+ * diffed against last week's. A webview would look better and could do none of
+ * those.
+ *
+ * Nothing here imports `vscode`, so every count and every sentence is decided
+ * in a module a test can call.
+ */
+
+import type { ActivityEntry, ActivityFailure } from '../read/activity.ts';
+import { relativeAge } from '../view/row.ts';
+import { PERIOD_LABELS, groupByDay, timeOf, type ActivityPeriod } from '../view/activity.ts';
+
+export interface ReportInput {
+  readonly entries: readonly ActivityEntry[];
+  readonly failures: readonly ActivityFailure[];
+  readonly period: ActivityPeriod;
+  /** How many repositories were discovered, including the ones that failed. */
+  readonly discovered: number;
+  /** Milliseconds since the epoch; passed in so the report is a function of its inputs. */
+  readonly now: number;
+}
+
+interface RepositoryTotals {
+  label: string;
+  commits: number;
+  merges: number;
+  authors: Set<string>;
+  latest: number;
+}
+
+interface AuthorTotals {
+  author: string;
+  commits: number;
+  merges: number;
+  repositories: Set<string>;
+  latest: number;
+}
+
+function plural(count: number, noun: string, plural_?: string): string {
+  return `${count} ${count === 1 ? noun : (plural_ ?? `${noun}s`)}`;
+}
+
+/** A table cell that will not break the table if the text contains a bar. */
+function cell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+}
+
+function windowPhrase(period: ActivityPeriod): string {
+  return period === 'today' ? 'today' : `in the last ${PERIOD_LABELS[period]}`;
+}
+
+export function byRepository(entries: readonly ActivityEntry[]): RepositoryTotals[] {
+  const totals = new Map<string, RepositoryTotals>();
+  for (const entry of entries) {
+    const existing = totals.get(entry.repositoryPath);
+    const merge = entry.commit.parents.length > 1;
+    if (existing) {
+      existing.commits += 1;
+      existing.merges += merge ? 1 : 0;
+      existing.authors.add(entry.commit.author);
+      existing.latest = Math.max(existing.latest, entry.commit.committedAt);
+    } else {
+      totals.set(entry.repositoryPath, {
+        label: entry.label,
+        commits: 1,
+        merges: merge ? 1 : 0,
+        authors: new Set([entry.commit.author]),
+        latest: entry.commit.committedAt,
+      });
+    }
+  }
+  // Busiest first, then most recent: the question a reader opens this with is
+  // "where did the work go", and ties are broken by what is still warm.
+  return [...totals.values()].sort(
+    (a, b) => b.commits - a.commits || b.latest - a.latest || a.label.localeCompare(b.label),
+  );
+}
+
+export function byAuthor(entries: readonly ActivityEntry[]): AuthorTotals[] {
+  const totals = new Map<string, AuthorTotals>();
+  for (const entry of entries) {
+    const merge = entry.commit.parents.length > 1;
+    const existing = totals.get(entry.commit.author);
+    if (existing) {
+      existing.commits += 1;
+      existing.merges += merge ? 1 : 0;
+      existing.repositories.add(entry.repositoryPath);
+      existing.latest = Math.max(existing.latest, entry.commit.committedAt);
+    } else {
+      totals.set(entry.commit.author, {
+        author: entry.commit.author,
+        commits: 1,
+        merges: merge ? 1 : 0,
+        repositories: new Set([entry.repositoryPath]),
+        latest: entry.commit.committedAt,
+      });
+    }
+  }
+  return [...totals.values()].sort(
+    (a, b) => b.commits - a.commits || a.author.localeCompare(b.author),
+  );
+}
+
+/**
+ * The whole report.
+ *
+ * The order is the order the questions are asked in: how much, where, by whom,
+ * when, and only then what. A reader who wants the commit list scrolls to it;
+ * a reader who wants to know whether Thursday was busy never has to.
+ */
+export function renderActivityReport(input: ReportInput): string {
+  const { entries, failures, period, discovered, now } = input;
+  const repositories = byRepository(entries);
+  const authors = byAuthor(entries);
+  const days = groupByDay(entries, now);
+  const merges = entries.filter((entry) => entry.commit.parents.length > 1).length;
+
+  const lines: string[] = [];
+
+  lines.push(`# Repo Ledger — activity ${windowPhrase(period)}`);
+  lines.push('');
+
+  if (entries.length === 0) {
+    lines.push(
+      `Nothing landed ${windowPhrase(period)} in any of the ${plural(discovered, 'repository', 'repositories')} that were read.`,
+    );
+  } else {
+    lines.push(
+      `**${plural(entries.length, 'commit')}** in **${plural(repositories.length, 'repository', 'repositories')}**, ` +
+        `by **${plural(authors.length, 'author')}**` +
+        `${merges > 0 ? `, including ${plural(merges, 'merge')}` : ''}.`,
+    );
+    lines.push('');
+    lines.push(
+      `Read from ${plural(discovered, 'repository', 'repositories')} discovered on this machine. ` +
+        `Every figure below comes from a \`git log\` that returned; nothing is estimated.`,
+    );
+  }
+
+  // Named, never counted. A report that quietly omitted repositories it could
+  // not read would describe a quieter week than actually happened, and it is
+  // the one error in a document like this that nobody can see.
+  if (failures.length > 0) {
+    lines.push('');
+    lines.push(
+      `> **${plural(failures.length, 'repository', 'repositories')} could not be read, and nothing from ` +
+        `${failures.length === 1 ? 'it' : 'them'} is counted anywhere in this report.**`,
+    );
+    lines.push('>');
+    for (const failure of [...failures].sort((a, b) => a.label.localeCompare(b.label))) {
+      const reason = failure.stderr.split('\n')[0] ?? 'no reason given';
+      lines.push(`> - \`${failure.label}\` — ${reason}`);
+    }
+  }
+
+  if (entries.length === 0) {
+    lines.push('');
+    return lines.join('\n') + '\n';
+  }
+
+  lines.push('');
+  lines.push('## Where the work went');
+  lines.push('');
+  lines.push('| Repository | Commits | Merges | Authors | Last commit |');
+  lines.push('|---|--:|--:|--:|---|');
+  for (const repository of repositories) {
+    lines.push(
+      `| ${cell(repository.label)} | ${repository.commits} | ${repository.merges} | ` +
+        `${repository.authors.size} | ${relativeAge(repository.latest, now)} |`,
+    );
+  }
+
+  lines.push('');
+  lines.push('## Who did it');
+  lines.push('');
+  lines.push('| Author | Commits | Merges | Repositories | Last commit |');
+  lines.push('|---|--:|--:|--:|---|');
+  for (const author of authors) {
+    lines.push(
+      `| ${cell(author.author)} | ${author.commits} | ${author.merges} | ` +
+        `${author.repositories.size} | ${relativeAge(author.latest, now)} |`,
+    );
+  }
+
+  lines.push('');
+  lines.push('## When');
+  lines.push('');
+  lines.push('| Day | Commits | Repositories | Authors |');
+  lines.push('|---|--:|--:|--:|');
+  for (const day of days) {
+    const repos = new Set(day.entries.map((entry) => entry.repositoryPath)).size;
+    const people = new Set(day.entries.map((entry) => entry.commit.author)).size;
+    lines.push(`| ${cell(day.heading)} | ${day.entries.length} | ${repos} | ${people} |`);
+  }
+
+  lines.push('');
+  lines.push('## Every commit');
+  for (const day of days) {
+    lines.push('');
+    lines.push(`### ${day.heading}`);
+    lines.push('');
+    for (const entry of day.entries) {
+      const merge = entry.commit.parents.length > 1 ? ' _(merge)_' : '';
+      lines.push(
+        `- \`${timeOf(entry.commit.committedAt)}\` **${cell(entry.label)}** — ` +
+          `${cell(entry.commit.subject)}${merge} · ${cell(entry.commit.author)} · ` +
+          `\`${entry.commit.shortSha}\``,
+      );
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n') + '\n';
+}
