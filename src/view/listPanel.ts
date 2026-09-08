@@ -208,49 +208,64 @@ function emptyTally(): Tally {
  * row's state colour paints it without a second table of colours.
  */
 const STATE_ICONS: Record<RowState, string> = {
-  clean: '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>',
+  // A solid dot: nothing to do, and the quietest mark on the board.
+  clean: '<circle cx="8" cy="8" r="3.2" fill="currentColor"/>',
+  // A pencil, because uncommitted work is work in progress rather than a state
+  // of the ring.
   dirty:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<circle cx="8" cy="8" r="2.6" fill="currentColor"/>',
-  // An arrow out: work that exists only here.
+    '<path d="M3.6 12.4 3 13l.6-2.4 6.5-6.5 1.8 1.8-6.5 6.5z" fill="currentColor"/>' +
+    '<path d="M10.9 3.2 12 2.1a1 1 0 0 1 1.4 0l.5.5a1 1 0 0 1 0 1.4l-1.1 1.1z" fill="currentColor"/>',
+  // An arrow leaving the machine: work that exists only here.
   unpushed:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<path d="M8 11.2V5.2M5.6 7.4 8 5 10.4 7.4" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+    '<path d="M8 13.2V3.4M4.2 7 8 3.2 11.8 7" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   behind:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<path d="M8 4.8v6M5.6 8.6 8 11 10.4 8.6" fill="none" stroke="currentColor"' +
-    ' stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+    '<path d="M8 2.8v9.8M4.2 9 8 12.8 11.8 9" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  // Both directions at once, which is the one state a single arrow cannot say.
   diverged:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<path d="M5.4 10.6 10.6 5.4M8.4 5.2h2.4v2.4M7.6 10.8H5.2V8.4" fill="none"' +
-    ' stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
-  // Cut loose from the ring.
+    '<path d="M5.2 12.6V4.4M2.6 6.6 5.2 4 7.8 6.6" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M10.8 3.4v8.2M8.2 9.4l2.6 2.6 2.6-2.6" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  // A commit off the branch line: a node with the line stopping short of it.
   detached:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"' +
-    ' stroke-dasharray="3 2.4"/>',
-  operation:
-    '<path d="M8 1.9 15 14.1H1Z" fill="none" stroke="currentColor" stroke-width="1.25"' +
-    ' stroke-linejoin="round"/>' +
-    '<path d="M8 6.2v3.6" fill="none" stroke="currentColor" stroke-width="1.4"' +
-    ' stroke-linecap="round"/><circle cx="8" cy="12" r="0.8" fill="currentColor"/>',
-  'no-upstream':
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<path d="M5.2 8h5.6" fill="none" stroke="currentColor" stroke-width="1.4"' +
-    ' stroke-linecap="round"/>',
-  unborn:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"' +
-    ' stroke-dasharray="1.6 2.2"/>',
-  unreadable:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
-    '<path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" fill="none" stroke="currentColor"' +
+    '<path d="M8 1.8v3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<circle cx="8" cy="8.4" r="2.9" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<path d="M12.6 12.4 14 13.8M3.4 12.4 2 13.8" fill="none" stroke="currentColor"' +
     ' stroke-width="1.4" stroke-linecap="round"/>',
-  // A hollow ring, deliberately the quietest glyph on the board: nothing has
-  // been established about this repository, and a mark that drew the eye would
-  // be claiming otherwise.
+  // The one shape on the board that is not round, because it is the one state
+  // that is a warning rather than a description.
+  operation:
+    '<path d="M8 1.9 15 14.1H1Z" fill="none" stroke="currentColor" stroke-width="1.4"' +
+    ' stroke-linejoin="round"/>' +
+    '<path d="M8 6v3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<circle cx="8" cy="11.9" r="0.85" fill="currentColor"/>',
+  // A line with nothing at the far end of it: there is no upstream to compare to.
+  'no-upstream':
+    '<circle cx="4.4" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+    '<path d="M7.4 8h3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<path d="M12 5.9 14.1 8 12 10.1" fill="none" stroke="currentColor" stroke-width="1.4"' +
+    ' stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>',
+  // An empty outline waiting for its first commit.
+  unborn:
+    '<circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+    '<path d="M8 5.4v5.2M5.4 8h5.2" fill="none" stroke="currentColor" stroke-width="1.4"' +
+    ' stroke-linecap="round"/>',
+  // A cross, and the only glyph drawn heavily: it is the one row carrying an
+  // error the reader can act on.
+  unreadable:
+    '<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.9" stroke-linecap="round"/>',
+  // Three dots. Nothing has been established about this repository yet, and the
+  // shape says "waiting" rather than joining the family of rings, which is the
+  // mistake the first version of this table made: clean, unborn, detached and
+  // unknown were four hollow circles differing only in their dash pattern, and
+  // at fourteen pixels a dash pattern is not a difference.
   unknown:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1"' +
-    ' stroke-dasharray="1 2.6" stroke-linecap="round"/>',
+    '<circle cx="3.4" cy="8" r="1.15" fill="currentColor"/>' +
+    '<circle cx="8" cy="8" r="1.15" fill="currentColor"/>' +
+    '<circle cx="12.6" cy="8" r="1.15" fill="currentColor"/>',
 };
 
 function icon(state: RowState): string {
@@ -273,12 +288,51 @@ function icon(state: RowState): string {
  * anybody opens this view to ask, and spending a chip on it would push the ones
  * that do want attention further along the row.
  */
-const CHIPS: ReadonlyArray<{ filter: FilterMode; key: keyof Tally; label: string }> = [
-  { filter: 'unpushed', key: 'unpushed', label: 'unpushed' },
-  { filter: 'dirty', key: 'dirty', label: 'uncommitted' },
-  { filter: 'behind', key: 'behind', label: 'behind' },
-  { filter: 'attention', key: 'attention', label: 'needs a look' },
-  { filter: 'unreadable', key: 'unreadable', label: 'unreadable' },
+interface Chip {
+  readonly filter: FilterMode;
+  readonly key: keyof Tally;
+  readonly label: string;
+  /**
+   * What the chip says when its count is zero.
+   *
+   * Written out per chip rather than composed from the label: the labels are
+   * adjectives and noun phrases in the same list, so one template produces
+   * "No repository is needs a look" for at least one of them.
+   */
+  readonly none: string;
+}
+
+const CHIPS: readonly Chip[] = [
+  {
+    filter: 'unpushed',
+    key: 'unpushed',
+    label: 'unpushed',
+    none: 'Every repository has pushed everything it has committed',
+  },
+  {
+    filter: 'dirty',
+    key: 'dirty',
+    label: 'uncommitted',
+    none: 'No repository is holding uncommitted work',
+  },
+  {
+    filter: 'behind',
+    key: 'behind',
+    label: 'behind',
+    none: 'No repository is behind its upstream, as of the last fetch of each',
+  },
+  {
+    filter: 'attention',
+    key: 'attention',
+    label: 'needs a look',
+    none: 'Nothing is detached, mid-operation, unborn or without an upstream',
+  },
+  {
+    filter: 'unreadable',
+    key: 'unreadable',
+    label: 'unreadable',
+    none: 'git answered for every repository',
+  },
 ];
 
 function renderHeader(model: ListModel): string {
@@ -293,14 +347,30 @@ function renderHeader(model: ListModel): string {
     ` aria-pressed="${showingAll ? 'true' : 'false'}">` +
     `<span class="count">${model.tally.total}</span> all</button>`;
 
-  const chips = CHIPS.filter((chip) => model.tally[chip.key] > 0).map((chip) => {
+  // Every chip is drawn, including the ones at zero. Hiding them was the
+  // earlier behaviour and it was wrong twice over: on a board where everything
+  // is clean the strip collapsed to a single word and stopped looking like a
+  // control at all, and a reader could not learn what the board is able to tell
+  // them without first being in the state that reveals it. A zero here is a
+  // measured zero - every one of these counts is derived from a read that
+  // returned - so saying "nothing unpushed" out loud is information, not noise.
+  // What a zero is not is clickable: filtering to an empty list would answer a
+  // question the strip has already answered.
+  const chips = CHIPS.map((chip) => {
+    const count = model.tally[chip.key];
+    if (count === 0) {
+      return (
+        `<span class="chip zero" title="${escapeHtml(chip.none)}">` +
+        `<span class="count">0</span> ${escapeHtml(chip.label)}</span>`
+      );
+    }
     const on = model.filter === chip.filter;
     const title = on ? `Showing only ${chip.label} — click to show all` : `Show only ${chip.label}`;
     return (
       `<button type="button" class="chip ${chip.filter}${on ? ' on' : ''}"` +
       ` data-filter="${on ? 'all' : chip.filter}" title="${escapeHtml(title)}"` +
       ` aria-pressed="${on ? 'true' : 'false'}">` +
-      `<span class="count">${model.tally[chip.key]}</span> ${escapeHtml(chip.label)}</button>`
+      `<span class="count">${count}</span> ${escapeHtml(chip.label)}</button>`
     );
   });
 
@@ -313,13 +383,17 @@ function renderHeader(model: ListModel): string {
         `<span class="count">${model.tally.unknown}</span> reading</span>`
       : '';
 
+  // Labelled in the page rather than only in `aria-label`: an unlabelled select
+  // in a sidebar is a control whose purpose the reader has to infer from its
+  // current value, and the current value is a sentence about repositories,
+  // which reads as a filter rather than as an ordering.
   const sort =
-    `<select class="sort" aria-label="Order">` +
+    `<label class="sort-label">Order<select class="sort">` +
     SORT_LABELS.map(
       ([mode, label]) =>
         `<option value="${mode}"${model.sort === mode ? ' selected' : ''}>${escapeHtml(label)}</option>`,
     ).join('') +
-    `</select>`;
+    `</select></label>`;
 
   return (
     `<header class="head"><div class="chips">${all}${chips.join('')}${unknown}</div>` +
@@ -328,11 +402,19 @@ function renderHeader(model: ListModel): string {
   );
 }
 
+/**
+ * Each option says what the ordering does, not what it is named after.
+ *
+ * `Name` on its own is a noun with no direction, and next to `Most diverged` a
+ * reader has to work out that one is a key and the other is a ranking. Every
+ * option is now a sentence about the first row, which is the row they are
+ * looking at while they read it.
+ */
 const SORT_LABELS: ReadonlyArray<[SortMode, string]> = [
-  ['recent', 'Recently committed'],
-  ['name', 'Name'],
-  ['divergence', 'Most diverged'],
-  ['dirty', 'Most uncommitted'],
+  ['recent', 'Newest commit first'],
+  ['name', 'Name, A to Z'],
+  ['divergence', 'Most diverged first'],
+  ['dirty', 'Most uncommitted first'],
 ];
 
 /**
@@ -510,15 +592,18 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
 /* State lives in one custom property per row, so the glyph and the edge rule
    are coloured from the same decision. Only the states that ask for a decision
    are tinted; colouring all ten would leave the eye nothing to land on. */
-.clean { --state: var(--vscode-descriptionForeground); }
+.clean { --state: var(--vscode-charts-green, #7fb98b); }
 .dirty { --state: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, #cca700)); }
 .unpushed { --state: var(--vscode-charts-blue, #4a8cd8); }
 .behind { --state: var(--vscode-charts-purple, #9a7bd0); }
 .diverged { --state: var(--vscode-list-warningForeground, #cca700); }
-.detached { --state: var(--vscode-descriptionForeground); }
+.detached { --state: var(--vscode-charts-orange, #d99a4a); }
 .operation { --state: var(--vscode-list-errorForeground, var(--vscode-editorError-foreground, #d97a6a)); }
 .no-upstream { --state: var(--vscode-descriptionForeground); }
-.unborn { --state: var(--vscode-descriptionForeground); }
+/* Not a state of the repository but a state of our knowledge, so it is the one
+   glyph drawn at less than full strength. */
+.unknown { --state: var(--vscode-descriptionForeground); opacity: 0.7; }
+.unborn { --state: var(--vscode-charts-blue, #4a8cd8); }
 .unreadable { --state: var(--vscode-list-errorForeground, #d97a6a); }
 .icon { color: var(--state); flex: none; }
 .head {
@@ -547,6 +632,11 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
 /* The one chip that is always present, so the header is never empty and the way
    back from a filter is always on screen. */
 .chip.all { font-weight: 600; }
+/* A count of zero, and it is a measured one: dimmed so it does not compete with
+   the states that want attention, and not a button because filtering to an
+   empty list answers nothing. */
+.chip.zero { opacity: 0.45; cursor: default; }
+.chip.zero .count { color: inherit; }
 .chip:not(.quiet):hover { background: var(--vscode-toolbar-hoverBackground); }
 .chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 /* The active filter is stated, not merely implied by a shorter list. */
@@ -558,6 +648,15 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
 .chip .count { color: var(--vscode-foreground); font-variant-numeric: tabular-nums; }
 .chip.on .count { color: inherit; }
 .controls { display: flex; padding: 2px 12px 7px; }
+.sort-label {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.86em;
+  color: var(--vscode-descriptionForeground);
+}
 .sort {
   flex: 1 1 auto;
   min-width: 0;
