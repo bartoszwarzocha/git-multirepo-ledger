@@ -160,7 +160,31 @@ Do not restore the old claims. They are checkable and they are wrong.
 
 ## Working agreement
 
-- Do not commit or push unless asked.
-- Verify by running things, not by reasoning about them — but verify *the code*, not the user's
-  machine.
-- When something is genuinely ambiguous, ask one short question. Do not investigate around it.
+Everything here was agreed with the user in conversation and then forgotten between sessions,
+because a rule spoken in one session does not exist in the next. This file is the only place that
+is loaded, verbatim, into every session. If something is agreed and it is not written here, expect
+it to be lost — so write it here.
+
+- **Do not commit or push unless asked.**
+- **After building a package, install it locally.** `code --install-extension <file> --force`, then
+  tell the user to reload the window. Building without installing leaves them testing yesterday's
+  code, and it has never once been what they wanted.
+- **Verify by running things, not by reasoning about them** — and verify *the code*, not the user's
+  machine. A passing test suite is not evidence that a button works; rendering the page and reading
+  the output, or driving the real module against a real repository, is. Never report a test count
+  as if it settled a question about behaviour.
+- **One command beats a guess.** Whether a version is on the Marketplace, what a setting currently
+  holds, which repositories exist — these are all one call away. Stating a belief about them
+  without checking has produced circular reasoning more than once, most memorably justifying a
+  repository's name by a `package.json` this session had written itself an hour earlier.
+- **Ship the scope asked for and nothing beside it.** A third route to a feature that already has
+  two is not an improvement; it is one more thing that can be broken without anybody noticing,
+  which is exactly what happened to the report button that shipped dead in 0.1.0.
+- **Do not ask about what is already settled.** Repeating a question the user has answered reads as
+  not listening, and it is.
+- **Read the intent, not only the words.** "Leave it" said in the middle of an outage means stop
+  touching it now — it does not mean ship the broken thing to users. When the letter of an
+  instruction and its evident purpose diverge, say so in one sentence and follow the purpose.
+- **Sequence identifier-level changes so they land once.** Names, setting keys and extension IDs
+  changed mid-testing orphan the user's settings and litter their extensions directory, and cost a
+  whole session to untangle.
