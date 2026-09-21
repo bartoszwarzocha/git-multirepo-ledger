@@ -697,9 +697,6 @@ export class LedgerController implements vscode.Disposable {
       case 'openAt':
         await this.openFromDigest(request.repositoryPath, request.sha);
         return;
-      case 'report':
-        await this.openActivityReport();
-        return;
     }
   }
 

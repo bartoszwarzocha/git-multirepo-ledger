@@ -27,9 +27,7 @@ export type HistoryRequest =
   /** Switch the pane between the selected repository and every repository. */
   | { readonly type: 'scope'; readonly scope: string }
   /** Open one commit of the digest, which lives in a repository of its own. */
-  | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string }
-  /** Open the same period as a document, in the editor. */
-  | { readonly type: 'report' };
+  | { readonly type: 'openAt'; readonly repositoryPath: string; readonly sha: string };
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = 'multirepoLedger.history';
@@ -114,9 +112,6 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         if (typeof payload['scope'] === 'string') {
           this.requested.fire({ type: 'scope', scope: payload['scope'] });
         }
-        return;
-      case 'report':
-        this.requested.fire({ type: 'report' });
         return;
       case 'openAt':
         if (
@@ -238,12 +233,15 @@ function renderActivity(model: HistoryModel): string {
           )
           .join('');
 
+  // No button here to open the report. There are already two - one in each
+  // panel's title bar - and a third route to the same document is not a
+  // convenience, it is one more thing that can be wrong without anybody
+  // noticing. This one was: it did nothing when pressed, and it shipped in
+  // 0.1.0 that way.
   return (
     `<div class="digest"><p class="summary">${escapeHtml(view.summary)}</p>` +
     `${view.unreadable ? `<p class="warn">${escapeHtml(view.unreadable)}</p>` : ''}` +
-    `<div class="filters"><button type="button" class="toggle report" data-report="1"` +
-    ` title="Open this period as a document: totals per repository, per author and per day">` +
-    `open the report</button></div></div>${body}`
+    `</div>${body}`
   );
 }
 
@@ -367,7 +365,6 @@ p { margin: 0 0 6px; }
   border-radius: 4px; background: none; color: var(--vscode-descriptionForeground);
   font: inherit; font-size: 0.88em; cursor: pointer; white-space: nowrap;
 }
-.toggle.report { margin-left: auto; }
 .toggle.on {
   border-color: var(--vscode-focusBorder);
   background: var(--vscode-list-activeSelectionBackground);
@@ -549,11 +546,6 @@ document.addEventListener('click', (event) => {
   const scope = target.closest('button[data-scope]');
   if (scope) {
     api.postMessage({ type: 'scope', scope: scope.getAttribute('data-scope') });
-    return;
-  }
-
-  if (target.closest('button[data-report]')) {
-    api.postMessage({ type: 'report' });
     return;
   }
 

@@ -4,6 +4,16 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-09-21
+
+### Removed
+
+- **The "open the report" button in the history pane.** It did nothing when pressed, and it
+  shipped that way. The report already has a button in each panel's title bar; a third route to
+  the same document was never a convenience, only one more thing that could be wrong without
+  anybody noticing - which is exactly what happened. The message it sent is gone with it, rather
+  than left behind as a path nothing travels.
+
 ## [0.1.1] - 2026-09-21
 
 ### Fixed
