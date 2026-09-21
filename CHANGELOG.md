@@ -4,6 +4,37 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-09-21
+
+### Fixed
+
+- **The commit list and the report went stale while the window was open.** They were re-read on
+  start-up, on Refresh and when the period changed - never from a pass. So a commit that landed
+  while you watched moved the row above it and left the list below showing whatever the period was
+  last asked for. Reported as "the extension did not refresh"; the reporter had found the
+  workaround without knowing it was one, because switching the period and back was the only control
+  on screen that re-read the commits. A pass now reads them alongside the rows.
+- **Refresh refreshed half of what you were looking at.** It reloaded the commits only in the `All`
+  scope, so pressing it while looking at one repository - the default - left that repository's list
+  untouched.
+- **A branch tip that lives only in `packed-refs` produced no event.** Verified against git 2.52: a
+  fresh clone keeps `refs/remotes/origin/main` there and writes no file under `refs/` for it, so a
+  repository whose refs are packed could move in silence. `packed-refs` is watched now, and so is
+  `reftable/**`, for repositories created on git's alternative ref backend, which have no `refs/`
+  directory at all.
+- **Starting a rebase, merge, cherry-pick, revert or bisect changed the row without an event.** The
+  markers those write are watched now, so the third line reports them as they happen.
+
+### Added
+
+- **`multirepoLedger.refreshIntervalMinutes`** - a periodic re-read, five minutes by default, `0`
+  to switch it off. File watching is not a guarantee: it degrades on network shares and mapped
+  drives, it is capped per platform, and `files.watcherExclude` over `.git` switches it off
+  entirely. The timer does not run while the window is unfocused.
+- **A read when the window regains focus**, which is the one case neither the watcher nor the timer
+  can see: work done in a terminal while the editor sat in the background. Floored at fifteen
+  seconds so that alt-tabbing costs nothing.
+
 ## [0.1.0] - 2026-09-08
 
 ### Added

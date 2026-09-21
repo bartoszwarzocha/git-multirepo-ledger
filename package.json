@@ -2,7 +2,7 @@
   "name": "git-multirepo-ledger",
   "displayName": "Git Multirepo Ledger",
   "description": "A status board for a whole directory of git repositories - multi-repo, multirepo, many repositories at once: what moved last, on which branch, how far from upstream, and what is waiting in review.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "bartosz-warzocha",
   "license": "MIT",
   "repository": {
@@ -171,6 +171,13 @@
           "minimum": 0,
           "maximum": 64,
           "markdownDescription": "How many repositories are read at the same time. Leave this at `0` and the Ledger works it out from what this machine says it can run at once, which is the right answer on almost every machine: reading a repository costs starting a `git` process and waiting, so the number that suits a four-core laptop is not the one that suits a thirty-two-core workstation. Set it yourself when you know something the Ledger cannot - a slow network share that dislikes many readers at once, or a machine where you would rather the scan took longer and stayed out of the way. Lower is gentler and slower; higher finishes sooner and holds more processes open at once."
+        },
+        "multirepoLedger.refreshIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "maximum": 1440,
+          "markdownDescription": "How often the board re-reads every repository, in minutes. `0` switches it off.\n\nThe Ledger already watches each repository’s `.git` and reacts the moment something changes there, so this is the safety net rather than the mechanism: file watching degrades on network shares and mapped drives, it is capped per platform, and setting `files.watcherExclude` over `.git` switches it off entirely. The timer does not run while the window is unfocused — a board nobody is looking at does not need to be current — and returning to the window triggers a read of its own.\n\nNo amount of re-reading shows what somebody else pushed: that is a fact about a server, and nothing on this disk changes until a fetch asks. See `#multirepoLedger.fetch.enabled#`."
         },
         "multirepoLedger.forge.enabled": {
           "type": "boolean",

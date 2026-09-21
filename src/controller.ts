@@ -19,6 +19,12 @@ import { RepositoryCache } from './discovery/cache.ts';
 import type { DiscoveryInput } from './discovery/repositories.ts';
 import { createWorkspaceSearcher } from './discovery/vscodeSearch.ts';
 import { pathKey } from './model/keys.ts';
+import {
+  DEFAULT_REFRESH_MINUTES,
+  WATCHED_GIT_PATHS,
+  refreshIntervalMs,
+  shouldRefreshOnFocus,
+} from './model/refresh.ts';
 import type {
   ActivityAuthor,
   ActivityView,
@@ -134,6 +140,15 @@ export class LedgerController implements vscode.Disposable {
   private activityAuthor: ActivityAuthor | undefined;
   /** A fetch is in flight; a second one must not start behind it. */
   private fetching = false;
+  /** The periodic re-read, for everything file watching does not reach. */
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  /**
+   * When the last pass finished, so focus does not stack a read on a read.
+   *
+   * Zero until one has finished, which is what tells the focus handler that
+   * the first pass is still running.
+   */
+  private lastPassFinishedAt = 0;
   private activityAbort: AbortController | undefined;
   private activityGeneration = 0;
   private generation = 0;
@@ -183,11 +198,10 @@ export class LedgerController implements vscode.Disposable {
 
   /** Called after `activate` has returned, so a walk never delays the view. */
   async start(): Promise<void> {
+    // The pass reads the commits as well, whichever scope the pane is in: the
+    // author list on the board is built from that answer, and `All` has to be
+    // instant rather than a second wait the reader pays for having pressed it.
     await this.refresh({ rediscover: true });
-    // Read after the board, whichever scope the pane is in: the author list on
-    // the board is built from this answer, and `All` has to be instant rather
-    // than a second wait the reader pays for having pressed it.
-    await this.loadActivity();
   }
 
   dispose(): void {
@@ -197,6 +211,10 @@ export class LedgerController implements vscode.Disposable {
     this.activityAbort?.abort();
     if (this.passTimer) {
       clearTimeout(this.passTimer);
+    }
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = undefined;
     }
     this.cache.cancel();
     ReportPanel.dispose();
@@ -332,6 +350,23 @@ export class LedgerController implements vscode.Disposable {
         }
       }
 
+      // The commits, from the same pass that read the rows.
+      //
+      // They used to be read only on start-up, on the Refresh button, and when
+      // the period changed - never from a pass. So a commit that landed while
+      // the window was open moved the row above and left the list below it
+      // showing the answer from whenever the period was last touched. It was
+      // reported as "the extension did not refresh", and the reporter had found
+      // the workaround without knowing it was one: switching the period and
+      // back was the only thing on screen that re-read the commits.
+      //
+      // It costs one `git log` per repository on top of the row read, which is
+      // why it sits behind the whole board being on screen rather than in front
+      // of it.
+      if (generation === this.generation && !abort.signal.aborted) {
+        await this.loadActivity();
+      }
+
       // Last, and only when the reader has switched it on. Everything above is
       // a local read; this is the one thing that leaves the machine, so it runs
       // behind a board that is already complete and useful without it.
@@ -342,6 +377,7 @@ export class LedgerController implements vscode.Disposable {
       log.error('pass failed', error);
     } finally {
       this.passRunning = false;
+      this.lastPassFinishedAt = Date.now();
       if (this.passQueued && !this.disposed) {
         this.passQueued = false;
         void this.refresh();
@@ -407,10 +443,10 @@ export class LedgerController implements vscode.Disposable {
   private async handleRequest(request: PanelRequest): Promise<void> {
     switch (request.type) {
       case 'refresh':
+        // The pass re-reads the commits too. It used to do so only in the `All`
+        // scope, so pressing Refresh while looking at one repository - the
+        // default - left the very list the reader was looking at untouched.
         await this.refresh({ rediscover: true });
-        if (this.paneMode === 'all') {
-          await this.loadActivity();
-        }
         return;
       case 'sort':
         await this.context.workspaceState.update(SORT_KEY, request.sort);
@@ -1301,18 +1337,22 @@ export class LedgerController implements vscode.Disposable {
   /**
    * Watch what changes a row, and nothing else.
    *
-   * `HEAD`, `FETCH_HEAD` and everything under `refs/` cover a commit, a
-   * checkout, a fetch and a branch change - every event that alters what a row
-   * says. Working-tree files are deliberately not watched: they change on every
-   * keystroke in every editor across every repository on the board, and the
-   * dirty column is a second-tier read that a Refresh already covers.
+   * The paths are decided in `model/refresh.ts`, where a test asserts that
+   * every state the row reports has something watching it - `refs/**` alone
+   * missed a branch tip that lives only in `packed-refs`, a repository on the
+   * reftable backend that has no `refs/` at all, and the start of a rebase.
+   *
+   * Watching is never the only mechanism. It degrades on network shares, it is
+   * capped per platform, and a reader with `files.watcherExclude` set over
+   * `.git` has switched it off without knowing what that costs here - so the
+   * timer and the focus handler below cover what it misses.
    */
   private installWatchers(repositories: readonly DiscoveredRepository[]): void {
     this.disposeWatchers();
     for (const repository of repositories) {
       const pattern = new vscode.RelativePattern(
         vscode.Uri.file(repository.gitDir),
-        '{HEAD,FETCH_HEAD,refs/**}',
+        WATCHED_GIT_PATHS,
       );
       const watcher = vscode.workspace.createFileSystemWatcher(pattern);
       watcher.onDidChange(() => this.schedulePass());
@@ -1357,9 +1397,52 @@ export class LedgerController implements vscode.Disposable {
     );
   }
 
+  /**
+   * The periodic re-read, restarted whenever its setting changes.
+   *
+   * Skipped while the window is not focused. A board nobody is looking at does
+   * not need to be current, and a machine with six editor windows open would
+   * otherwise run six fans of `git` processes at the same moment for the
+   * benefit of nobody. Coming back to a window is itself a trigger, so nothing
+   * is lost by waiting for it.
+   */
+  private installRefreshTimer(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+
+    const everyMs = refreshIntervalMs(
+      this.config.get<number>('refreshIntervalMinutes', DEFAULT_REFRESH_MINUTES),
+    );
+    if (everyMs === undefined) {
+      log.info('periodic refresh is off');
+      return;
+    }
+
+    log.info(`periodic refresh every ${Math.round(everyMs / 1000)}s`);
+    this.refreshTimer = setInterval(() => {
+      if (this.disposed || !vscode.window.state.focused) {
+        return;
+      }
+      this.schedulePass();
+    }, everyMs);
+  }
+
   private registerListeners(): void {
+    this.installRefreshTimer();
     this.disposables.push(
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.schedulePass(true)),
+      // Work done outside this editor while it sat in the background is the one
+      // case neither the watcher nor the timer sees: the watcher because the
+      // events arrive to a window that ignores them, the timer because it does
+      // not run while unfocused. Somebody who pulls in a terminal, comes back,
+      // and finds the board unchanged reads that as broken.
+      vscode.window.onDidChangeWindowState((state) => {
+        if (state.focused && shouldRefreshOnFocus(this.lastPassFinishedAt, Date.now())) {
+          this.schedulePass();
+        }
+      }),
       vscode.workspace.onDidChangeConfiguration((event) => {
         // Only the settings that change what is discovered force a new walk;
         // the rest are picked up by the next publish.
@@ -1375,6 +1458,8 @@ export class LedgerController implements vscode.Disposable {
           event.affectsConfiguration('multirepoLedger.forge.enabled')
         ) {
           this.schedulePass();
+        } else if (event.affectsConfiguration('multirepoLedger.refreshIntervalMinutes')) {
+          this.installRefreshTimer();
         } else if (
           event.affectsConfiguration('multirepoLedger.badge') ||
           event.affectsConfiguration('multirepoLedger.fetch.enabled')
