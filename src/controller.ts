@@ -322,13 +322,13 @@ export class LedgerController implements vscode.Disposable {
         return;
       }
 
-      this.publish(this.dirtyEnabled());
+      this.publish(true);
       await this.setStateContext();
 
       // Tier two, behind the board rather than in front of it. The list is
       // already readable; this only adds the one column that costs a second
       // process per repository, and it is skipped entirely when switched off.
-      if (this.dirtyEnabled()) {
+      {
         await readDirtyState({
           rows: collected,
           signal: abort.signal,
@@ -1208,10 +1208,6 @@ export class LedgerController implements vscode.Disposable {
     return this.context.workspaceState.get<FilterMode>(FILTER_KEY) ?? 'all';
   }
 
-  private dirtyEnabled(): boolean {
-    return this.config.get<boolean>('dirty.enabled', true);
-  }
-
   private concurrency(): number {
     return this.config.get<number>('concurrency', 0);
   }
@@ -1597,7 +1593,6 @@ export class LedgerController implements vscode.Disposable {
         ) {
           this.schedulePass(true);
         } else if (
-          event.affectsConfiguration('multirepoLedger.dirty.enabled') ||
           event.affectsConfiguration('multirepoLedger.concurrency') ||
           event.affectsConfiguration('multirepoLedger.forge.enabled')
         ) {

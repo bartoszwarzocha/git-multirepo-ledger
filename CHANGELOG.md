@@ -24,6 +24,16 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
   `multirepoLedger.dirty.enabled` is off. It is the only thing the Ledger does that changes a file
   in a working tree, which is why it has its own switch rather than riding on the fetch's.
 
+### Removed
+
+- **`multirepoLedger.dirty.enabled`.** The working-tree read now always runs. The setting existed
+  to save a second `git` process per repository, but that read is already the second tier of a
+  pass - the board is on screen and useful before it returns, so nobody was waiting for it - and a
+  repository genuinely too slow to stat is better named in `multirepoLedger.exclude` than paid for
+  by dropping the column everywhere. What it cost was worse: a second mode in which the row said
+  nothing in that position and, once Catch Up existed, refused to run with a reason that read like
+  a fault. Uncommitted work is the one column every comparable tool agrees on; it is not optional.
+
 ### Fixed
 
 - **The progress bar never stopped.** Every publish inside a pass carries `passRunning`, which is

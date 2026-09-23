@@ -171,11 +171,6 @@
           "minimum": 1,
           "markdownDescription": "How many directory levels below each scanned root the search descends looking for a `.git`. This is a stop against a symlink cycle or a root that turns out to be a home directory, **not** a way to make the scan cheaper: lowering it hides repositories that sit deeper than the limit, and a repository missing from the list is worse than a scan that takes a moment longer, because nothing on screen says it is missing."
         },
-        "multirepoLedger.dirty.enabled": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show which repositories have uncommitted changes. This is the one read that has to walk the working tree, so it costs a second `git` process for each repository on screen, and on a very large checkout or a network share it is the read you would feel. What it buys is the only column every dedicated multi-repository status tool agrees on: the `*`, `+` and `!` markers that say a repository holds work not yet committed - the work that exists nowhere but this disk. While this is off the Ledger says nothing in that position rather than showing a zero, because a repository nobody asked about is not a repository that is clean."
-        },
         "multirepoLedger.concurrency": {
           "type": "number",
           "default": 0,
@@ -210,7 +205,7 @@
         "multirepoLedger.pull.enabled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Offer a **Catch Up** button on each row and in the view title. It runs `git pull --ff-only`, which fetches and then moves your branch forward — so the *behind* count goes to zero instead of merely becoming true.\n\nIt runs **only where a fast-forward is the only thing that can happen**: the branch is behind and not ahead, HEAD is on a branch, no merge, rebase, cherry-pick, revert or bisect is half-finished, and the working tree has been read and is clean. Everything else is left untouched and named, with the reason — *diverged, 2 ahead and 2 behind*, *uncommitted changes*, *detached HEAD*. Those are the repositories you have to look at yourself, and quietly merging one of them is exactly what this avoids.\n\nA working tree that was never read does not count as clean, so this does nothing while `#multirepoLedger.dirty.enabled#` is off.\n\nIt ships disabled because it is the only thing the Ledger does that changes a file in your working tree."
+          "markdownDescription": "Offer a **Catch Up** button on each row and in the view title. It runs `git pull --ff-only`, which fetches and then moves your branch forward — so the *behind* count goes to zero instead of merely becoming true.\n\nIt runs **only where a fast-forward is the only thing that can happen**: the branch is behind and not ahead, HEAD is on a branch, no merge, rebase, cherry-pick, revert or bisect is half-finished, and the working tree has been read and is clean. Everything else is left untouched and named, with the reason — *diverged, 2 ahead and 2 behind*, *uncommitted changes*, *detached HEAD*. Those are the repositories you have to look at yourself, and quietly merging one of them is exactly what this avoids.\n\nIt ships disabled because it is the only thing the Ledger does that changes a file in your working tree."
         },
         "multirepoLedger.history.pageSize": {
           "type": "number",

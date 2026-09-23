@@ -60,12 +60,12 @@ export type Eligibility = { readonly ok: true } | NotEligible;
  * Pure, and the order of the tests is the order a person would check them in:
  * what git would refuse outright first, then what is theirs to lose.
  *
- * A working tree nobody has read is treated as *not* clean. With
- * `dirty.enabled` off, every row carries `not-read`, and reading that as "no
- * changes" would be the one mistake this whole extension is written to avoid -
- * here it would not merely misreport, it would write over somebody's work.
- * git would very likely refuse anyway; "very likely" is not the standard for
- * something that touches files.
+ * A working tree nobody has read is treated as *not* clean. The read is the
+ * second tier of a pass, so a row carries `not-read` until it returns and
+ * whenever it failed, and reading that as "no changes" would be the one mistake
+ * this whole extension is written to avoid - here it would not merely
+ * misreport, it would write over somebody's work. git would very likely refuse
+ * anyway; "very likely" is not the standard for something that touches files.
  */
 export function eligibleForFastForward(row: RepositoryRow): Eligibility {
   if (row.failure !== undefined) {

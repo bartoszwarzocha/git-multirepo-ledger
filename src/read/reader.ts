@@ -23,7 +23,12 @@
  * extension that walks the working tree. Its cost is proportional to the number
  * of tracked and untracked files rather than to the number of repositories, so
  * on a large checkout or a network share it is the read that would make a board
- * feel slow. It is therefore opt-in (`multirepoLedger.dirty.enabled`) and it runs
+ * feel slow. It therefore runs as a second tier, behind a board that is
+ * already on screen and useful without it - a reader waits for nothing. It
+ * used to be switchable off as well, and that setting is gone: it made every
+ * downstream decision ask whether the answer existed, and a repository that
+ * is genuinely too slow to stat is better named in `multirepoLedger.exclude`
+ * than paid for by dropping the column everywhere. It runs
  * only for the rows the caller asks about - in practice, the ones on screen.
  *
  * The two costs are orthogonal: `for-each-ref` scales with ref count and

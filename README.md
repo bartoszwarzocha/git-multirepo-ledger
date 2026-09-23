@@ -85,7 +85,6 @@ against one side and misleading against the other.
 | `multirepoLedger.additionalRoots` | `[]` | Absolute directory paths scanned for repositories in addition to the open folders. This is the normal way to use the extension: the directory your repositories live in is usually not the one you have open. |
 | `multirepoLedger.exclude` | `[]` | Absolute paths of repositories to leave out entirely — a mirror, a vendored checkout, anything you keep but never work in. |
 | `multirepoLedger.maxDepth` | `32` | How deep below each root the search for `.git` descends. A stop against a symlink cycle or a home directory, not a way to make the scan cheaper. |
-| `multirepoLedger.dirty.enabled` | `true` | Show which repositories hold uncommitted work. The one read that walks the working tree, so it costs a second `git` process per repository on screen. While off, the row says nothing there rather than showing a zero. |
 | `multirepoLedger.concurrency` | `0` | How many repositories are read at once. `0` derives it from what the machine says it can run in parallel. |
 | `multirepoLedger.history.pageSize` | `50` | Commits per page in the history pane. |
 | `multirepoLedger.badge` | `unpushed` | What the number on the Activity Bar icon counts. Every option is also a chip on the board, so one click shows exactly what the badge counted. A count of none draws no badge rather than a `0`. |
