@@ -373,6 +373,19 @@ export class LedgerController implements vscode.Disposable {
       if (this.forgeEnabled()) {
         await this.readReviews(collected, abort.signal, generation);
       }
+
+      // The pass is over, so the board must say so.
+      //
+      // Every publish above passes `this.passRunning`, which is still `true`
+      // here - it is cleared in the `finally` below, after the last of them has
+      // already gone out. That was harmless while the commits were read outside
+      // the pass; once they moved inside it, `publishActivity` became the last
+      // thing to publish, and it published "busy" as the final word on every
+      // pass. The progress bar then ran for ever, and a fetch made it obvious
+      // because a fetch ends by forcing a pass.
+      if (generation === this.generation && !abort.signal.aborted) {
+        this.publish(false);
+      }
     } catch (error) {
       log.error('pass failed', error);
     } finally {
@@ -1294,7 +1307,11 @@ export class LedgerController implements vscode.Disposable {
           await vscode.commands.executeCommand('multirepoLedger.showOutput');
         }
       } else {
-        void vscode.window.setStatusBarMessage(`Multirepo Ledger: ${fetchSentence(report)}`, 6000);
+        // A notification rather than a status-bar message, which vanished after
+        // six seconds and took the only account of what had happened with it.
+        // This one stays until it is dismissed and is still in the
+        // notifications list afterwards.
+        void vscode.window.showInformationMessage(fetchSentence(report));
       }
     } finally {
       this.fetching = false;
