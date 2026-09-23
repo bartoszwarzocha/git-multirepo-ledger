@@ -44,6 +44,7 @@ import type {
 import { readDirtyState, readRows } from './read/reader.ts';
 import { readActivity, type ActivityEntry, type ActivityFailure } from './read/activity.ts';
 import { fetchRepositories, fetchSentence } from './read/fetch.ts';
+import { eligibleForFastForward, pullRepositories, pullSentence } from './read/pull.ts';
 import {
   buildActivityReport,
   renderActivityReport,
@@ -434,6 +435,7 @@ export class LedgerController implements vscode.Disposable {
       filter: this.filter,
       busy,
       fetchEnabled: this.config.get<boolean>('fetch.enabled', false),
+      pullEnabled: this.config.get<boolean>('pull.enabled', false),
       generation: this.generation,
       ...(this.selectedPath === undefined ? {} : { selectedPath: this.selectedPath }),
       period: this.activityPeriod,
@@ -557,6 +559,13 @@ export class LedgerController implements vscode.Disposable {
         const row = this.rows.find((entry) => pathKey(entry.repository.path) === pathKey(target));
         if (row) {
           await this.fetch([row]);
+        }
+        return;
+      }
+      case 'pull': {
+        const row = this.rows.find((entry) => pathKey(entry.repository.path) === pathKey(target));
+        if (row) {
+          await this.pull([row]);
         }
         return;
       }
@@ -1322,6 +1331,121 @@ export class LedgerController implements vscode.Disposable {
     this.schedulePass();
   }
 
+  /**
+   * Catch up, in the repositories where catching up cannot go wrong.
+   *
+   * `git pull --ff-only`, and only where the row already says a fast-forward is
+   * the only thing that could happen: behind and not ahead, on a branch, no
+   * half-finished operation, and a working tree that has been read and is
+   * clean. `read/pull.ts` decides that, purely, and a test holds each condition.
+   *
+   * The check is not the safety net - `--ff-only` makes git refuse anything
+   * else. It is what lets the reader be told which repositories were left alone
+   * and *why*, in the same sentence, instead of reading a dozen identical
+   * refusals afterwards. Those repositories are the ones worth their attention
+   * anyway: "diverged, 2 ahead and 2 behind" is the useful answer, and having
+   * that one quietly merged is not.
+   *
+   * Gated separately from the fetch because it is a different risk. A fetch
+   * cannot touch a file the reader has open; this can.
+   */
+  private async pull(rows: readonly RepositoryRow[]): Promise<void> {
+    if (!this.config.get<boolean>('pull.enabled', false)) {
+      const turnOn = 'Open settings';
+      const answer = await vscode.window.showInformationMessage(
+        'Catching up is off. It is the only thing the Ledger does that changes a file in your working tree, so it ships disabled.',
+        turnOn,
+      );
+      if (answer === turnOn) {
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          'multirepoLedger.pull.enabled',
+        );
+      }
+      return;
+    }
+
+    if (this.fetching) {
+      void vscode.window.showInformationMessage('A fetch is already running.');
+      return;
+    }
+    if (rows.length === 0) {
+      return;
+    }
+
+    // Said before anything runs, because a button that catches up nothing at
+    // all should say so rather than flashing a progress bar and stopping.
+    const eligible = rows.filter((row) => eligibleForFastForward(row).ok);
+    if (eligible.length === 0) {
+      const first = rows[0];
+      const only = rows.length === 1 && first ? eligibleForFastForward(first) : undefined;
+      void vscode.window.showInformationMessage(
+        only !== undefined && !only.ok && first
+          ? `${first.repository.label} was left alone: ${only.reason}.`
+          : 'Nothing here can be fast-forwarded - every repository is diverged, mid-operation, on a detached HEAD, or holding uncommitted work. The log names each one.',
+      );
+      for (const row of rows) {
+        const verdict = eligibleForFastForward(row);
+        if (!verdict.ok) {
+          log.info(`left alone: ${row.repository.label} - ${verdict.reason}`);
+        }
+      }
+      return;
+    }
+
+    const concurrency = Math.max(1, this.config.get<number>('fetch.concurrency', 4));
+
+    this.fetching = true;
+    try {
+      const report = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title:
+            eligible.length === 1
+              ? `Multirepo Ledger: catching up ${eligible[0]?.repository.label ?? ''}`
+              : `Multirepo Ledger: catching up ${eligible.length} repositories`,
+          cancellable: true,
+        },
+        async (progress, token) => {
+          const controller = new AbortController();
+          token.onCancellationRequested(() => controller.abort());
+          let settled = 0;
+          return pullRepositories({
+            rows,
+            concurrency,
+            signal: controller.signal,
+            onSettled: (label) => {
+              settled += 1;
+              progress.report({ message: `${settled} of ${eligible.length} \u00b7 ${label}` });
+            },
+          });
+        },
+      );
+
+      for (const failure of report.failures) {
+        log.warn(`pull failed in ${failure.label}: ${failure.command} -> ${failure.stderr}`);
+      }
+      for (const entry of report.skipped) {
+        log.info(`left alone: ${entry.label} - ${entry.reason}`);
+      }
+      log.info(pullSentence(report));
+
+      if (report.failures.length > 0) {
+        const show = 'Show Log';
+        const answer = await vscode.window.showWarningMessage(pullSentence(report), show);
+        if (answer === show) {
+          await vscode.commands.executeCommand('multirepoLedger.showOutput');
+        }
+      } else {
+        void vscode.window.showInformationMessage(pullSentence(report));
+      }
+    } finally {
+      this.fetching = false;
+    }
+
+    this.schedulePass();
+  }
+
   /** What the badge counts, as configured. */
   private badgeMode(): BadgeMode {
     const configured = this.config.get<string>('badge', DEFAULT_BADGE_MODE);
@@ -1393,6 +1517,12 @@ export class LedgerController implements vscode.Disposable {
       }),
       vscode.commands.registerCommand('multirepoLedger.activityReport', () =>
         this.openActivityReport(),
+      ),
+      vscode.commands.registerCommand('multirepoLedger.pullAll', () =>
+        // Same exclusion as the fetch: a repository git already refused to
+        // answer for would refuse this too, for the same reason, and the row
+        // is already saying so in git's own words.
+        this.pull(this.rows.filter((row) => !isUnreadable(row))),
       ),
       vscode.commands.registerCommand('multirepoLedger.fetchAll', () =>
         // A repository git already refused to answer for is left out of the
@@ -1476,7 +1606,8 @@ export class LedgerController implements vscode.Disposable {
           this.installRefreshTimer();
         } else if (
           event.affectsConfiguration('multirepoLedger.badge') ||
-          event.affectsConfiguration('multirepoLedger.fetch.enabled')
+          event.affectsConfiguration('multirepoLedger.fetch.enabled') ||
+          event.affectsConfiguration('multirepoLedger.pull.enabled')
         ) {
           // Nothing has to be read again - the tally the badge counts is
           // already in hand - but something does have to be published, or the

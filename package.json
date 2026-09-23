@@ -99,6 +99,12 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "multirepoLedger.pullAll",
+        "title": "Catch Up (fast-forward only)",
+        "category": "Multirepo Ledger",
+        "icon": "$(arrow-down)"
+      },
+      {
         "command": "multirepoLedger.showOutput",
         "title": "Show Log",
         "category": "Multirepo Ledger"
@@ -125,6 +131,11 @@
           "command": "multirepoLedger.fetchAll",
           "when": "view == multirepoLedger.repositories && config.multirepoLedger.fetch.enabled",
           "group": "navigation@2"
+        },
+        {
+          "command": "multirepoLedger.pullAll",
+          "when": "view == multirepoLedger.repositories && config.multirepoLedger.pull.enabled",
+          "group": "navigation@3"
         },
         {
           "command": "multirepoLedger.showOutput",
@@ -195,6 +206,11 @@
           "minimum": 1,
           "maximum": 32,
           "markdownDescription": "How many repositories are fetched at the same time. Unlike `#multirepoLedger.concurrency#` this cannot be worked out from your machine: the limit here belongs to a server the Ledger cannot see, and twenty simultaneous connections to one host is a thing a status board should not do on its own. The default is deliberately timid rather than measured. Raise it when you know the remote can take it; lower it on a slow link or a host that throttles."
+        },
+        "multirepoLedger.pull.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Offer a **Catch Up** button on each row and in the view title. It runs `git pull --ff-only`, which fetches and then moves your branch forward — so the *behind* count goes to zero instead of merely becoming true.\n\nIt runs **only where a fast-forward is the only thing that can happen**: the branch is behind and not ahead, HEAD is on a branch, no merge, rebase, cherry-pick, revert or bisect is half-finished, and the working tree has been read and is clean. Everything else is left untouched and named, with the reason — *diverged, 2 ahead and 2 behind*, *uncommitted changes*, *detached HEAD*. Those are the repositories you have to look at yourself, and quietly merging one of them is exactly what this avoids.\n\nA working tree that was never read does not count as clean, so this does nothing while `#multirepoLedger.dirty.enabled#` is off.\n\nIt ships disabled because it is the only thing the Ledger does that changes a file in your working tree."
         },
         "multirepoLedger.history.pageSize": {
           "type": "number",

@@ -6,6 +6,24 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 
 ## [0.1.2] - 2026-09-23
 
+### Added
+
+- **Catch Up** — `git pull --ff-only`, on each row and for the whole board, behind
+  `multirepoLedger.pull.enabled` and off by default. Fetch makes the *behind* count true; this one
+  takes it to zero.
+
+  It runs only where a fast-forward is the only thing that can happen: behind and not ahead, HEAD
+  on a branch, no half-finished merge, rebase, cherry-pick, revert or bisect, and a working tree
+  that has been read and is clean. Everything else is left untouched and named with its reason —
+  *diverged, 2 ahead and 2 behind*, *uncommitted changes*, *detached HEAD*, *the branch tracks
+  nothing*. `--ff-only` means git enforces this too; the check exists so that a reader is told
+  which repositories were left alone and why, in one sentence, rather than reading a dozen
+  identical refusals.
+
+  A working tree nobody read does not count as clean, so nothing happens while
+  `multirepoLedger.dirty.enabled` is off. It is the only thing the Ledger does that changes a file
+  in a working tree, which is why it has its own switch rather than riding on the fetch's.
+
 ### Fixed
 
 - **The progress bar never stopped.** Every publish inside a pass carries `passRunning`, which is

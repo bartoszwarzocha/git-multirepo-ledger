@@ -554,6 +554,14 @@ export interface ListModel {
    */
   readonly fetchEnabled: boolean;
   /**
+   * The fast-forward button is offered on each row.
+   *
+   * Its own flag rather than a second use of `fetchEnabled`, because the two
+   * are different risks: a fetch cannot touch a file the reader has open,
+   * and this can.
+   */
+  readonly pullEnabled: boolean;
+  /**
    * The period every commit question is asked over: the pane's list and the
    * report both. On the board because it is a lens over everything, not a
    * setting of one panel.
@@ -812,7 +820,8 @@ export type RowAction =
   | 'reveal-in-scm'
   | 'open-terminal'
   | 'copy-path'
-  | 'fetch';
+  | 'fetch'
+  | 'pull';
 
 export const ROW_ACTIONS: readonly RowAction[] = [
   'open-window',
@@ -821,4 +830,5 @@ export const ROW_ACTIONS: readonly RowAction[] = [
   'open-terminal',
   'copy-path',
   'fetch',
+  'pull',
 ];

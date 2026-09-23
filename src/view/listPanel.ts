@@ -65,6 +65,7 @@ export class ListViewProvider implements vscode.WebviewViewProvider {
     filter: 'all',
     busy: true,
     fetchEnabled: false,
+    pullEnabled: false,
     generation: 0,
     period: 'week',
     mergesOnly: false,
@@ -556,6 +557,17 @@ const ROW_ACTION_ICONS: ReadonlyArray<{ action: string; title: string; svg: stri
       '<path d="M2.7 12.6h10.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
   },
   {
+    // Catching up, where catching up cannot go wrong. An arrow into a tray
+    // rather than the fetch's arrow to a line: one brings the work here, the
+    // other only looks.
+    action: 'pull',
+    title: 'Catch up, where it is only a fast-forward',
+    svg:
+      '<path d="M8 2.2v6.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>' +
+      '<path d="M5.3 5.9 8 8.6l2.7-2.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M3 10.2v2.8h10v-2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+  },
+  {
     action: 'copy-path',
     title: 'Copy the path',
     svg:
@@ -564,7 +576,12 @@ const ROW_ACTION_ICONS: ReadonlyArray<{ action: string; title: string; svg: stri
   },
 ];
 
-function renderRow(row: RenderedRow, selected: boolean, fetchEnabled: boolean): string {
+function renderRow(
+  row: RenderedRow,
+  selected: boolean,
+  fetchEnabled: boolean,
+  pullEnabled: boolean,
+): string {
   const where = `data-path="${escapeHtml(row.path)}"`;
 
   // Line 1. The name wins the width contest; the evidence age is the dimmed
@@ -608,9 +625,17 @@ function renderRow(row: RenderedRow, selected: boolean, fetchEnabled: boolean): 
       ? `<span class="why">${escapeHtml(row.unreadableReason)}</span>`
       : '';
 
-  const actions = ROW_ACTION_ICONS.filter(
-    (entry) => entry.action !== 'fetch' || fetchEnabled,
-  ).map(
+  const actions = ROW_ACTION_ICONS.filter((entry) => {
+    // The two that reach the network are drawn only when the reader has said
+    // they may be.
+    if (entry.action === 'fetch') {
+      return fetchEnabled;
+    }
+    if (entry.action === 'pull') {
+      return pullEnabled;
+    }
+    return true;
+  }).map(
     (entry) =>
       `<button type="button" class="row-action" data-action="${entry.action}" ${where}` +
       ` title="${escapeHtml(entry.title)}" aria-label="${escapeHtml(`${entry.title}: ${row.name}`)}">` +
@@ -671,7 +696,9 @@ export function renderHtml(model: ListModel, nonce: string): string {
   const body = empty
     ? `${header}${renderEmpty(model)}`
     : `${header}<div class="rows">${rendered
-        .map((row) => renderRow(row, row.path === model.selectedPath, model.fetchEnabled))
+        .map((row) =>
+          renderRow(row, row.path === model.selectedPath, model.fetchEnabled, model.pullEnabled),
+        )
         .join('')}</div>`;
 
   return `<!DOCTYPE html>
