@@ -4,6 +4,22 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-09-23
+
+### Fixed
+
+- **The progress bar never stopped.** Every publish inside a pass carries `passRunning`, which is
+  only cleared once the pass is over - after the last of those publishes has already gone out. That
+  was harmless while the commit list was read outside the pass; when 0.1.1 moved it inside,
+  `publishActivity` became the last thing to publish on every pass and published "busy" as its
+  final word. Pressing Fetch made it obvious rather than causing it, because a fetch ends by
+  forcing a pass.
+
+### Changed
+
+- **The fetch result is a notification**, which waits to be dismissed, rather than a status-bar
+  message that vanished after six seconds and took the only account of what had happened with it.
+
 ## [0.1.1] - 2026-09-21
 
 ### Fixed
