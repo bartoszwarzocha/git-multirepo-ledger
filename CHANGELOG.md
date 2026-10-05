@@ -36,6 +36,13 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 
 ### Fixed
 
+- **The panels ignored a theme change.** Switching VS Code to a light theme on a machine whose
+  operating system is set to dark left the board and the history pane painted dark, with the
+  light theme's dark text on top of it - unreadable. The pages declared `color-scheme: light dark`
+  and nothing else, so the engine resolved the scheme from the *operating system* while every
+  theme variable came from the editor. The two rules that pin it to the editor's own theme, which
+  the sibling project has carried from the start, were never copied across. With them the panels
+  follow a theme change the moment it happens, without re-rendering.
 - **The progress bar never stopped.** Every publish inside a pass carries `passRunning`, which is
   only cleared once the pass is over - after the last of those publishes has already gone out. That
   was harmless while the commit list was read outside the pass; when 0.1.1 moved it inside,

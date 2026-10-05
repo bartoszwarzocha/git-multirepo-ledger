@@ -277,6 +277,16 @@ ${body}
 
 const STYLES = `
 :root { color-scheme: light dark; }
+/* Pinned to the editor's theme, not the operating system's. Left to
+   light-dark alone the engine resolves the scheme from the OS preference, so
+   on a machine set to dark with VS Code set to light every theme variable came
+   out light while the canvas behind the transparent body stayed dark - dark
+   text on a dark page, and the panel looked like it had ignored the theme
+   change entirely. VS Code maintains these classes on the body and swaps them
+   the moment the theme changes, which is also what makes this follow a theme
+   change without anything re-rendering. */
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
 body {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
