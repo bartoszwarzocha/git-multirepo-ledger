@@ -177,6 +177,11 @@ it to be lost — so write it here.
   machine. A passing test suite is not evidence that a button works; rendering the page and reading
   the output, or driving the real module against a real repository, is. Never report a test count
   as if it settled a question about behaviour.
+- **Check the Marketplace immediately before setting a version number**, with
+  `npx @vscode/vsce show bartosz-warzocha.git-multirepo-ledger`. Not once a session - every time,
+  in the same breath as the bump. Checking it an hour earlier and trusting that answer has twice
+  put a second, different build behind a published number, and a published version cannot be
+  overwritten.
 - **One command beats a guess.** Whether a version is on the Marketplace, what a setting currently
   holds, which repositories exist — these are all one call away. Stating a belief about them
   without checking has produced circular reasoning more than once, most memorably justifying a
