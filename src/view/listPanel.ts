@@ -733,7 +733,13 @@ body {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-foreground);
-  background: transparent;
+  /* Painted, not inherited. A transparent body leaves the page on the browser
+     canvas, and the canvas takes its colour scheme from the root element - so
+     pinning color-scheme on the body, which VS Code s theme classes sit on,
+     cannot reach it. On a machine whose OS is dark with the editor set light,
+     the canvas stayed dark under light theme text. Painting it ourselves from
+     the theme removes the question. */
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
   margin: 0;
   padding: 0 0 12px;
   line-height: 1.35;
