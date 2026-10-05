@@ -166,6 +166,10 @@ is loaded, verbatim, into every session. If something is agreed and it is not wr
 it to be lost — so write it here.
 
 - **Do not commit or push unless asked.**
+- **Every change to the extension ends in a package.** Build it, package it, install it - in that
+  order, without being asked. A change that compiles is not a change the user can look at, and
+  asking them to wait while you decide whether it is worth packaging wastes the one thing they
+  cannot get back.
 - **After building a package, install it locally.** `code --install-extension <file> --force`, then
   tell the user to reload the window. Building without installing leaves them testing yesterday's
   code, and it has never once been what they wanted.
