@@ -4,7 +4,7 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-09-23
+## [0.1.3] - 2026-10-05
 
 ### Added
 
@@ -47,6 +47,10 @@ All notable changes to Multirepo Ledger are recorded here, in the format of
   body - that is what the sibling project has always done, and it is right for the form controls
   and scrollbars, but it cannot reach the canvas: the canvas takes its scheme from the root
   element, not from the body.
+
+## [0.1.2] - 2026-09-23
+
+### Fixed
 
 - **The progress bar never stopped.** Every publish inside a pass carries `passRunning`, which is
   only cleared once the pass is over - after the last of those publishes has already gone out. That
